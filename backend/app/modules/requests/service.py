@@ -182,7 +182,7 @@ def update_request(
     request: Request,
     body: RequestUpdate,
 ) -> Request:
-    authz.require_view(user, request)
+    authz.require_view(db, user, request)
 
     # Field edits: requester only, and only while draft (or description clarify when submitted)
     fields_changing = any(

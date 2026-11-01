@@ -32,8 +32,13 @@ async def save_attachment(
     request: Request,
     upload: UploadFile,
 ) -> Attachment:
-    authz.require_view(user, request)
-    if not (authz.can_edit_as_requester(user, request) or authz.is_admin(user)):
+    authz.require_view(db, user, request)
+    allowed_upload = authz.can_edit_as_requester(user, request) or (
+        not authz.is_hr_case(request) and authz.is_admin(user)
+    ) or (
+        authz.is_hr_case(request) and authz.can_access_hr_content(db, user, request)
+    )
+    if not allowed_upload:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to upload")
 
     settings = get_settings()

@@ -79,7 +79,8 @@ def db(engine) -> Generator[Session, None, None]:
 
     it = Department(code="IT", name="Information Technology", description="IT", is_active=True)
     fleet = Department(code="FLEET", name="Fleet Operations", description="Fleet", is_active=True)
-    session.add_all([it, fleet])
+    hr_dept = Department(code="HR", name="Human Resources", description="HR", is_active=True)
+    session.add_all([it, fleet, hr_dept])
     session.flush()
 
     roles = {
@@ -112,6 +113,13 @@ def db(engine) -> Generator[Session, None, None]:
         ["employee", "department_manager"],
     )
     admin = make_user("admin@aibrm.example.com", "Alex Admin", it, ["employee", "admin"])
+    hr_user = make_user("hr@aibrm.example.com", "Harper HR", hr_dept, ["employee", "hr"])
+    reviewer = make_user(
+        "reviewer@aibrm.example.com",
+        "Riley Reviewer",
+        fleet,
+        ["employee", "reviewer"],
+    )
 
     session.flush()
     session.info["users"] = {
@@ -119,8 +127,10 @@ def db(engine) -> Generator[Session, None, None]:
         "other": other,
         "manager": manager,
         "admin": admin,
+        "hr": hr_user,
+        "reviewer": reviewer,
     }
-    session.info["departments"] = {"IT": it, "FLEET": fleet}
+    session.info["departments"] = {"IT": it, "FLEET": fleet, "HR": hr_dept}
 
     yield session
 

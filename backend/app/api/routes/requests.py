@@ -88,7 +88,7 @@ def get_request_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> RequestDetail:
     request = get_request_or_404(db, request_id)
-    authz.require_view(current_user, request)
+    authz.require_view(db, current_user, request)
     return RequestDetail.model_validate(request)
 
 
@@ -112,7 +112,7 @@ def get_history_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> list[RequestHistoryOut]:
     request = get_request_or_404(db, request_id)
-    authz.require_view(current_user, request)
+    authz.require_view(db, current_user, request)
     return [RequestHistoryOut.model_validate(h) for h in list_history(db, request_id)]
 
 
@@ -123,7 +123,7 @@ def get_analysis_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> AIAnalysisOut:
     request = get_request_or_404(db, request_id)
-    authz.require_view(current_user, request)
+    authz.require_view(db, current_user, request)
     from sqlalchemy.orm import joinedload
 
     analysis = (
@@ -185,7 +185,7 @@ def download_attachment_endpoint(
     from app.models.attachment import Attachment
 
     request = get_request_or_404(db, request_id)
-    authz.require_view(current_user, request)
+    authz.require_attachment_download(db, current_user, request)
     attachment = (
         db.query(Attachment)
         .filter(Attachment.id == attachment_id, Attachment.request_id == request_id)
@@ -196,6 +196,18 @@ def download_attachment_endpoint(
     path = absolute_path_for(attachment)
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File missing on disk")
+    from app.modules.audit.service import write_audit
+
+    write_audit(
+        db,
+        actor_id=current_user.id,
+        action="attachment.download",
+        resource_type="attachment",
+        resource_id=str(attachment.id),
+        details=f"Downloaded attachment for request {request_id}",
+        metadata={"request_id": str(request_id), "is_hr_case": authz.is_hr_case(request)},
+        commit=True,
+    )
     return FileResponse(
         path,
         media_type=attachment.content_type,
