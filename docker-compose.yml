@@ -33,13 +33,23 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    # Optional local file (gitignored). Codespaces Secrets are injected into the
+    # codespace environment and passed through the ${VAR} mappings below.
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       POSTGRES_HOST: postgres
       RABBITMQ_HOST: rabbitmq
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aibrm}:${POSTGRES_PASSWORD:-aibrm_dev_password}@postgres:5432/${POSTGRES_DB:-aibrm}
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-aibrm}:${RABBITMQ_PASSWORD:-aibrm_dev_password}@rabbitmq:5672//
+      # AI — prefer host/Codespaces env over committed files (never commit keys)
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      GROQ_MAX_TOKENS: ${GROQ_MAX_TOKENS:-512}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-5-5}
     ports:
       - "8000:8000"
     volumes:
@@ -66,12 +76,19 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       POSTGRES_HOST: postgres
       RABBITMQ_HOST: rabbitmq
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aibrm}:${POSTGRES_PASSWORD:-aibrm_dev_password}@postgres:5432/${POSTGRES_DB:-aibrm}
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-aibrm}:${RABBITMQ_PASSWORD:-aibrm_dev_password}@rabbitmq:5672//
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      GROQ_MAX_TOKENS: ${GROQ_MAX_TOKENS:-512}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-5-5}
     volumes:
       - ./backend:/app
     depends_on:

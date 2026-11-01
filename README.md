@@ -171,14 +171,34 @@ work when your Groq project has access — set `GROQ_MODEL` accordingly.
 
 ```bash
 AI_PROVIDER=groq
-GROQ_API_KEY=gsk_...
-GROQ_MODEL=openai/gpt-oss-20b
+GROQ_API_KEY=gsk_...          # from vault / Codespaces Secrets — never commit
+GROQ_MODEL=openai/gpt-oss-20b # optional override
 ```
 
-**Codespaces / Compose:** set `AI_PROVIDER`, `GROQ_API_KEY`, and optional
-`GROQ_MODEL` in Codespaces Secrets or gitignored `.env` (Compose already loads
-`.env` via `env_file`). Never commit a real key. **Rotate any key pasted into
-chat.**
+### Store secrets in GitHub Codespaces (recommended)
+
+Do **not** commit API keys. Put them in the repo’s Codespaces secret vault:
+
+1. Open the GitHub repository in the browser.
+2. Go to **Settings** → **Secrets and variables** → **Codespaces**  
+   Console path: `Settings → Secrets and variables → Codespaces`  
+   Direct URL pattern: `https://github.com/<owner>/<repo>/settings/secrets/codespaces`
+3. Click **New repository secret** and add:
+   - `GROQ_API_KEY` — your Groq key (value only; name must match exactly)
+   - `AI_PROVIDER` — value `groq`
+   - `GROQ_MODEL` — optional; e.g. `openai/gpt-oss-20b` (Compose/app default if omitted)
+4. **Rebuild the codespace** (or open a new codespace) so secrets are injected into the environment. Codespaces exports repository Codespaces secrets as environment variables inside the codespace.
+5. Recreate API/worker containers so they pick up the new env:
+
+```bash
+docker compose up -d --force-recreate api worker
+# or full stack:
+docker compose down && docker compose up --build -d
+```
+
+`docker-compose.yml` passes `AI_PROVIDER`, `GROQ_API_KEY`, and `GROQ_MODEL` from the host environment into the **api** and **worker** services (and may also load an optional gitignored `.env`). Host/Codespaces env wins for those variables.
+
+Local alternative: `cp .env.example .env` and fill placeholders in the gitignored `.env` only — never stage or commit that file.
 
 ### Anthropic (optional)
 
