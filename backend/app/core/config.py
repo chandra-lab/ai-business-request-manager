@@ -50,6 +50,16 @@ class Settings(BaseSettings):
 
     seed_demo_password: str = "DemoPass123!"
 
+    upload_dir: str = "uploads"
+    upload_max_bytes: int = 10 * 1024 * 1024  # 10 MiB
+    upload_allowed_content_types: str = (
+        "application/pdf,"
+        "image/png,image/jpeg,image/webp,"
+        "text/plain,"
+        "application/msword,"
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
     @field_validator("jwt_secret")
     @classmethod
     def jwt_secret_must_be_long(cls, value: str) -> str:
@@ -78,6 +88,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def allowed_upload_content_types(self) -> set[str]:
+        return {t.strip() for t in self.upload_allowed_content_types.split(",") if t.strip()}
 
 
 @lru_cache

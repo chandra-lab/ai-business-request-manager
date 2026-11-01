@@ -1,4 +1,4 @@
-"""Pytest fixtures for Phase 1 smoke tests.
+"""Pytest fixtures for AIBRM API tests.
 
 Uses a dedicated `aibrm_test` database so drop/create never touches
 the development database used by Compose / seed.
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Generator
+from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 import pytest
@@ -22,6 +23,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("SEED_DEMO_PASSWORD", "DemoPass123!")
+os.environ.setdefault("UPLOAD_DIR", "/tmp/aibrm-test-uploads")
 
 from app.core.config import get_settings
 from app.core.database import Base, get_db
@@ -33,16 +35,17 @@ from app.models.user import User
 import app.models  # noqa: F401
 
 
+DEMO_PASSWORD = os.environ["SEED_DEMO_PASSWORD"]
+
+
 def _admin_and_test_urls() -> tuple[str, str]:
     settings = get_settings()
     base = os.environ.get("TEST_DATABASE_URL") or settings.sqlalchemy_database_uri
     parsed = urlparse(base)
-    # Connect to maintenance DB to create aibrm_test
-    admin_path = "/postgres"
-    test_path = "/aibrm_test"
-    admin_url = urlunparse(parsed._replace(path=admin_path))
-    test_url = urlunparse(parsed._replace(path=test_path))
+    admin_url = urlunparse(parsed._replace(path="/postgres"))
+    test_url = urlunparse(parsed._replace(path="/aibrm_test"))
     return admin_url, test_url
+
 
 
 @pytest.fixture(scope="session")
@@ -56,6 +59,8 @@ def engine():
         if not exists:
             conn.execute(text("CREATE DATABASE aibrm_test"))
     admin_engine.dispose()
+
+    Path(os.environ["UPLOAD_DIR"]).mkdir(parents=True, exist_ok=True)
 
     eng = create_engine(test_url, poolclass=NullPool, future=True)
     Base.metadata.drop_all(bind=eng)
@@ -72,22 +77,50 @@ def db(engine) -> Generator[Session, None, None]:
     TestingSession = sessionmaker(bind=connection, autocommit=False, autoflush=False)
     session = TestingSession()
 
-    dept = Department(code="IT", name="Information Technology", description="IT", is_active=True)
-    role = Role(name="employee", description="Employee")
-    session.add_all([dept, role])
+    it = Department(code="IT", name="Information Technology", description="IT", is_active=True)
+    fleet = Department(code="FLEET", name="Fleet Operations", description="Fleet", is_active=True)
+    session.add_all([it, fleet])
     session.flush()
 
-    user = User(
-        email="employee@aibrm.example.com",
-        full_name="Eva Employee",
-        password_hash=hash_password(os.environ["SEED_DEMO_PASSWORD"]),
-        department_id=dept.id,
-        is_active=True,
+    roles = {
+        name: Role(name=name, description=name)
+        for name in ("employee", "department_manager", "reviewer", "hr", "admin")
+    }
+    session.add_all(roles.values())
+    session.flush()
+
+    def make_user(email: str, name: str, dept: Department, role_names: list[str]) -> User:
+        user = User(
+            email=email,
+            full_name=name,
+            password_hash=hash_password(DEMO_PASSWORD),
+            department_id=dept.id,
+            is_active=True,
+        )
+        session.add(user)
+        session.flush()
+        for rn in role_names:
+            session.add(UserRole(user_id=user.id, role_id=roles[rn].id))
+        return user
+
+    employee = make_user("employee@aibrm.example.com", "Eva Employee", it, ["employee"])
+    other = make_user("other@aibrm.example.com", "Omar Other", fleet, ["employee"])
+    manager = make_user(
+        "manager@aibrm.example.com",
+        "Morgan Manager",
+        it,
+        ["employee", "department_manager"],
     )
-    session.add(user)
+    admin = make_user("admin@aibrm.example.com", "Alex Admin", it, ["employee", "admin"])
+
     session.flush()
-    session.add(UserRole(user_id=user.id, role_id=role.id))
-    session.flush()
+    session.info["users"] = {
+        "employee": employee,
+        "other": other,
+        "manager": manager,
+        "admin": admin,
+    }
+    session.info["departments"] = {"IT": it, "FLEET": fleet}
 
     yield session
 
@@ -109,3 +142,17 @@ def client(db: Session) -> Generator[TestClient, None, None]:
         yield test_client
     app.dependency_overrides.clear()
     get_settings.cache_clear()
+
+
+@pytest.fixture
+def auth_headers(client: TestClient):
+    def _login(email: str) -> dict[str, str]:
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": DEMO_PASSWORD},
+        )
+        assert response.status_code == 200, response.text
+        token = response.json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    return _login

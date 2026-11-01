@@ -75,6 +75,12 @@ class Request(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     is_hr_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(128),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
 
     requester: Mapped[User] = relationship("User", foreign_keys=[requester_id])
     department: Mapped[Department | None] = relationship("Department")

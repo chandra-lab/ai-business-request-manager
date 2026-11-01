@@ -6,7 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routes import auth, health
+from pathlib import Path
+
+from app.api.routes import auth, dashboard, health, requests
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 
@@ -19,6 +21,7 @@ async def lifespan(_app: FastAPI):
     settings = get_settings()
     configure_logging(settings.log_level)
     logger = get_logger(__name__)
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     logger.info(
         "Starting %s v%s (env=%s, ai_provider=%s)",
         settings.app_name,
@@ -36,7 +39,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         description=(
             "AI Business Request Manager — internal request routing for an automotive group. "
-            "Phase 1 foundation: auth, schema, health."
+            "Phase 2: request lifecycle, attachments, employee dashboard."
         ),
         version=__version__,
         lifespan=lifespan,
@@ -55,6 +58,8 @@ def create_app() -> FastAPI:
 
     application.include_router(health.router)
     application.include_router(auth.router, prefix=settings.api_v1_prefix)
+    application.include_router(requests.router, prefix=settings.api_v1_prefix)
+    application.include_router(dashboard.router, prefix=settings.api_v1_prefix)
 
     return application
 

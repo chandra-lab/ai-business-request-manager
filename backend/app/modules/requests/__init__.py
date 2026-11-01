@@ -1,1 +1,1 @@
-"""requests module — implemented in later phases."""
+"""Request management module."""
