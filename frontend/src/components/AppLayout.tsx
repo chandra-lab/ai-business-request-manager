@@ -23,15 +23,15 @@ export function AppLayout() {
               <Link className="hover:text-brand-700" to="/app/requests/new">
                 New request
               </Link>
+              {user?.department_id || hasRole("department_manager", "admin") ? (
+                <Link className="hover:text-brand-700" to="/app/department">
+                  Team queue
+                </Link>
+              ) : null}
               {hasRole("department_manager", "admin") ? (
-                <>
-                  <Link className="hover:text-brand-700" to="/app/department">
-                    Team queue
-                  </Link>
-                  <Link className="hover:text-brand-700" to="/app/manager">
-                    Assignments
-                  </Link>
-                </>
+                <Link className="hover:text-brand-700" to="/app/manager">
+                  Assignments
+                </Link>
               ) : null}
               {hasRole("reviewer", "admin") ? (
                 <Link className="hover:text-brand-700" to="/app/review">

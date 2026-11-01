@@ -70,11 +70,29 @@ def can_access_hr_content(db: Session, user: User, request: Request) -> bool:
     return has_active_hr_case_access(db, user.id, request.id)
 
 
+def is_same_department(user: User, request: Request) -> bool:
+    return bool(
+        user.department_id
+        and request.department_id
+        and user.department_id == request.department_id
+    )
+
+
+_DEPT_VISIBLE_STATUSES = {
+    RequestStatus.PENDING_ASSIGNMENT,
+    RequestStatus.ASSIGNED,
+    RequestStatus.IN_PROGRESS,
+    RequestStatus.RESOLVED,
+}
+
+
 def can_view_request(db: Session, user: User, request: Request) -> bool:
     """Who may open a request record.
 
     HR-sensitive cases: requester, HR role, or explicit HRCaseAccess only.
     Admins do **not** automatically see HR cases.
+    Department **members** (not only managers) see non-HR tickets for their dept
+    once routed (pending assignment onward).
     """
     if is_hr_case(request):
         if request.requester_id == user.id:
@@ -85,7 +103,7 @@ def can_view_request(db: Session, user: User, request: Request) -> bool:
         return True
     if is_admin(user):
         return True
-    if is_manager(user) and user.department_id and request.department_id == user.department_id:
+    if is_manager(user) and is_same_department(user, request):
         return True
     if is_reviewer(user):
         # Review queue items, plus department-routed work reviewers may reassign
@@ -111,26 +129,42 @@ def can_view_request(db: Session, user: User, request: Request) -> bool:
     )
     if active is not None:
         return True
-    # Same-department visibility for assigned work (department-level read)
-    if (
-        user.department_id
-        and request.department_id
-        and user.department_id == request.department_id
-        and request.status
-        in {
-            RequestStatus.PENDING_ASSIGNMENT,
-            RequestStatus.ASSIGNED,
-            RequestStatus.IN_PROGRESS,
-            RequestStatus.RESOLVED,
-        }
-    ):
+    # Same-department visibility for department members (not only managers)
+    if is_same_department(user, request) and request.status in _DEPT_VISIBLE_STATUSES:
         return True
     return False
 
 
-def can_view_internal_history(user: User) -> bool:
-    """Staff roles see RequestHistory; employees see comments instead."""
+def can_view_internal_history(db: Session, user: User, request: Request | None = None) -> bool:
+    """Staff roles see RequestHistory; department members use comments + status actions."""
+    _ = db, request  # request reserved for future scoped rules
     return bool(is_admin(user) or is_manager(user) or is_reviewer(user) or is_hr(user))
+
+
+def can_work_request(db: Session, user: User, request: Request) -> bool:
+    """Progress status / work the ticket: assignee, dept member, manager, or admin."""
+    if is_hr_case(request):
+        return can_access_hr_content(db, user, request) and (
+            is_hr(user) or is_admin(user)
+        )
+    if is_admin(user):
+        return True
+    if is_manager(user) and is_same_department(user, request):
+        return True
+    if is_same_department(user, request) and request.status in _DEPT_VISIBLE_STATUSES:
+        return True
+    from app.models.assignment import Assignment, AssignmentStatus
+
+    active = (
+        db.query(Assignment)
+        .filter(
+            Assignment.request_id == request.id,
+            Assignment.status == AssignmentStatus.ACTIVE,
+            Assignment.assignee_id == user.id,
+        )
+        .first()
+    )
+    return active is not None
 
 
 def can_assign_individual(db: Session, user: User, request: Request) -> bool:
@@ -299,14 +333,26 @@ def apply_list_scope(query: Any, user: User, db: Session) -> Any:
     roles = role_set(user)
     clauses = [Request.requester_id == user.id]
 
-    if "department_manager" in roles and user.department_id is not None:
-        clauses.append(
-            and_(
-                Request.department_id == user.department_id,
-                Request.is_hr_sensitive.is_(False),
-                Request.confidentiality == ConfidentialityLevel.STANDARD,
+    if user.department_id is not None:
+        if "department_manager" in roles:
+            # Managers see all non-HR tickets for their department
+            clauses.append(
+                and_(
+                    Request.department_id == user.department_id,
+                    Request.is_hr_sensitive.is_(False),
+                    Request.confidentiality == ConfidentialityLevel.STANDARD,
+                )
             )
-        )
+        else:
+            # Department members (employees) see routed work for their team
+            clauses.append(
+                and_(
+                    Request.department_id == user.department_id,
+                    Request.is_hr_sensitive.is_(False),
+                    Request.confidentiality == ConfidentialityLevel.STANDARD,
+                    Request.status.in_(list(_DEPT_VISIBLE_STATUSES)),
+                )
+            )
 
     if "reviewer" in roles:
         clauses.append(

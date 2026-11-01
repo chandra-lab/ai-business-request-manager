@@ -84,6 +84,16 @@ def list_departments(db: Session, *, include_inactive: bool = False) -> list[Dep
     return q.order_by(Department.name.asc()).all()
 
 
+def list_active_members(db: Session, *, department_id: UUID) -> list[User]:
+    """Active users belonging to a department (for assignee pickers)."""
+    return (
+        db.query(User)
+        .filter(User.department_id == department_id, User.is_active.is_(True))
+        .order_by(User.full_name.asc())
+        .all()
+    )
+
+
 def create_department(
     db: Session,
     *,

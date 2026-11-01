@@ -12,7 +12,26 @@ from app.modules.requests import authz
 
 
 def department_dashboard(db: Session, user: User) -> dict:
-    if not (authz.is_manager(user) or authz.is_admin(user)):
+    """Team queue for department managers and department members."""
+    if authz.is_admin(user):
+        q = db.query(Request).filter(Request.is_hr_sensitive.is_(False))
+    elif user.department_id:
+        q = db.query(Request).filter(
+            Request.is_hr_sensitive.is_(False),
+            Request.department_id == user.department_id,
+        )
+        if not authz.is_manager(user):
+            q = q.filter(
+                Request.status.in_(
+                    [
+                        RequestStatus.PENDING_ASSIGNMENT,
+                        RequestStatus.ASSIGNED,
+                        RequestStatus.IN_PROGRESS,
+                        RequestStatus.RESOLVED,
+                    ]
+                )
+            )
+    else:
         return {
             "pending_assignment_count": 0,
             "assigned_count": 0,
@@ -20,18 +39,6 @@ def department_dashboard(db: Session, user: User) -> dict:
             "resolved_count": 0,
             "recent": [],
         }
-
-    q = db.query(Request).filter(Request.is_hr_sensitive.is_(False))
-    if authz.is_manager(user) and not authz.is_admin(user):
-        if not user.department_id:
-            return {
-                "pending_assignment_count": 0,
-                "assigned_count": 0,
-                "in_progress_count": 0,
-                "resolved_count": 0,
-                "recent": [],
-            }
-        q = q.filter(Request.department_id == user.department_id)
 
     def count_status(*statuses: RequestStatus) -> int:
         return int(

@@ -35,7 +35,12 @@ def assign_employee(
     assignee_id: UUID,
     notes: str | None = None,
 ) -> Assignment:
-    if not authz.can_assign_individual(db, actor, request):
+    self_claim = (
+        actor.id == assignee_id
+        and authz.is_same_department(actor, request)
+        and request.status == RequestStatus.PENDING_ASSIGNMENT
+    )
+    if not authz.can_assign_individual(db, actor, request) and not self_claim:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
 
     if request.status not in {

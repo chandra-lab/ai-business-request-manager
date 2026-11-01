@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,8 +47,11 @@ class Settings(BaseSettings):
 
     ai_provider: str = "mock"
     anthropic_api_key: str = ""
-    # Official Claude Haiku 5.5 ID from Anthropic docs: https://platform.claude.com/docs/en/models/haiku-5-5/overview
-    anthropic_model_id: str = "claude-haiku-5-5"
+    # Official Claude Haiku 5.5 — set via ANTHROPIC_MODEL (or legacy ANTHROPIC_MODEL_ID)
+    anthropic_model_id: str = Field(
+        default="claude-haiku-5-5",
+        validation_alias=AliasChoices("ANTHROPIC_MODEL", "ANTHROPIC_MODEL_ID", "anthropic_model_id"),
+    )
     anthropic_max_tokens: int = 512
     # Simulate provider outage (forces AI failure → manual review) for scenario testing
     ai_force_failure: bool = False

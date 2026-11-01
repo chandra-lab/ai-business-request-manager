@@ -74,7 +74,7 @@ TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
 curl -s -X POST http://localhost:8000/api/v1/requests \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-1' \
-  -d '{"title":"Need badge access","description":"Cannot enter building B after hours.","priority":"high","submit":true}'
+  -d '{"title":"Need badge access","description":"Cannot enter building B after hours.","submit":true}'
 
 curl -s http://localhost:8000/api/v1/requests -H "Authorization: Bearer $TOKEN"
 curl -s http://localhost:8000/api/v1/dashboard/employee -H "Authorization: Bearer $TOKEN"
@@ -156,11 +156,21 @@ Phase 3 worker: on `request.submitted` outbox → `submitted` → `ai_processing
 
 ## AI providers (Phase 3)
 
+**Default is Mock** — no Anthropic key required for local demo or CI.
+
+To switch to Claude Haiku later (when you have a key):
+
+```bash
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-haiku-5-5
+```
+
 | Setting | Purpose |
 |---------|---------|
-| `AI_PROVIDER` | `mock` (default) or `anthropic` |
+| `AI_PROVIDER` | `mock` (**default**) or `anthropic` |
 | `ANTHROPIC_API_KEY` | Required only when `AI_PROVIDER=anthropic` |
-| `ANTHROPIC_MODEL_ID` | Default **`claude-haiku-5-5`** ([Anthropic Haiku 5.5 docs](https://platform.claude.com/docs/en/models/haiku-5-5/overview)) |
+| `ANTHROPIC_MODEL` | Claude model id (default **`claude-haiku-5-5`**). Alias: `ANTHROPIC_MODEL_ID` |
 | `ANTHROPIC_MAX_TOKENS` | Default `512` |
 | `AI_FORCE_FAILURE` | Simulate provider outage → analysis failure → review |
 | `ROUTING_AUTO_ASSIGN_MIN` | Default `0.85` auto department |
@@ -185,7 +195,7 @@ AI-recommended priority is stored on `AIAnalysis.recommended_priority` and audit
 
 ## Security (Phase 5)
 
-- **Department scope**: managers/dept users see non-HR requests for their department; reviewers see non-HR `pending_review`.
+- **Department scope**: managers and **department members** see non-HR requests for their department (routed statuses); reviewers see non-HR `pending_review` (and may assign a department member from Actions).
 - **HR boundary**: `is_hr_sensitive` / `highly_confidential` cases are visible to the **requester**, **HR role**, or users with an explicit `HRCaseAccess` grant only.
 - **Admins do not auto-get HR content** — grant required (or HR role).
 - **HRCaseNotes** are separate from request body; requesters can open their case but get **403** on notes.

@@ -59,8 +59,15 @@ def department_dashboard_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> DepartmentDashboardResponse:
-    if not (authz.is_manager(current_user) or authz.is_admin(current_user)):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager role required")
+    if not (
+        authz.is_admin(current_user)
+        or authz.is_manager(current_user)
+        or current_user.department_id is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Department membership required",
+        )
     data = dash.department_dashboard(db, current_user)
     return DepartmentDashboardResponse(
         pending_assignment_count=data["pending_assignment_count"],

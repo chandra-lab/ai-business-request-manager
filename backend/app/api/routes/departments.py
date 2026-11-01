@@ -1,15 +1,16 @@
-"""Department list + admin create/update/delete."""
+"""Department list + admin create/update/delete + members."""
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.models.department import Department
 from app.models.user import User
 from app.modules.departments import service as dept_service
 from app.modules.requests import authz
@@ -48,6 +49,15 @@ class DepartmentDeleteOut(BaseModel):
     department: DepartmentOut | None = None
 
 
+class DepartmentMemberOut(BaseModel):
+    id: UUID
+    email: str
+    full_name: str
+    department_id: UUID | None = None
+
+    model_config = {"from_attributes": True}
+
+
 @router.get("", response_model=list[DepartmentOut])
 def list_departments(
     db: Session = Depends(get_db),
@@ -56,6 +66,30 @@ def list_departments(
     include_inactive = authz.is_admin(current_user)
     items = dept_service.list_departments(db, include_inactive=include_inactive)
     return [DepartmentOut.model_validate(i) for i in items]
+
+
+@router.get("/{department_id}/members", response_model=list[DepartmentMemberOut])
+def list_department_members(
+    department_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[DepartmentMemberOut]:
+    """Active members of a department — used by reviewer assignee picker."""
+    if not (
+        authz.is_admin(current_user)
+        or authz.is_reviewer(current_user)
+        or authz.is_manager(current_user)
+        or (
+            current_user.department_id is not None
+            and current_user.department_id == department_id
+        )
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
+    dept = db.query(Department).filter(Department.id == department_id).first()
+    if dept is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
+    members = dept_service.list_active_members(db, department_id=department_id)
+    return [DepartmentMemberOut.model_validate(u) for u in members]
 
 
 @router.post("", response_model=DepartmentOut, status_code=status.HTTP_201_CREATED)

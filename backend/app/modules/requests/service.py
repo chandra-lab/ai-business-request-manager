@@ -313,15 +313,8 @@ def _apply_status_change(
         if request.status in {RequestStatus.CLOSED, RequestStatus.CANCELLED}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already terminal")
     elif target in {RequestStatus.IN_PROGRESS, RequestStatus.RESOLVED, RequestStatus.CLOSED}:
-        # Narrow manager/admin progress — full assignment UX is Phase 4
-        if not (
-            authz.is_admin(user)
-            or (
-                authz.is_manager(user)
-                and user.department_id
-                and request.department_id == user.department_id
-            )
-        ):
+        # Assignees, department members, managers, and admins may progress work
+        if not authz.can_work_request(db, user, request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     elif target == RequestStatus.AI_PROCESSING:
         # Reserved for Phase 3 workers / admin bootstrap

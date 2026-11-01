@@ -89,4 +89,9 @@ export const routingApi = {
       "/api/v1/departments",
     );
   },
+  departmentMembers(departmentId: string) {
+    return api<{ id: string; email: string; full_name: string; department_id: string | null }[]>(
+      `/api/v1/departments/${departmentId}/members`,
+    );
+  },
 };

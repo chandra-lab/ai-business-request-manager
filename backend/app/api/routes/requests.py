@@ -117,7 +117,7 @@ def get_history_endpoint(
     request = get_request_or_404(db, request_id)
     authz.require_view(db, current_user, request)
     # Internal status transitions are staff-only; employees use the comments thread.
-    if not authz.can_view_internal_history(current_user):
+    if not authz.can_view_internal_history(db, current_user, request):
         return []
     return [RequestHistoryOut.model_validate(h) for h in list_history(db, request_id)]
 

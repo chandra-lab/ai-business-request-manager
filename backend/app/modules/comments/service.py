@@ -19,6 +19,8 @@ def _can_comment(db: Session, user: User, request: Request) -> bool:
         return True
     if authz.is_admin(user) or authz.is_manager(user) or authz.is_reviewer(user) or authz.is_hr(user):
         return True
+    if authz.is_same_department(user, request):
+        return True
     active = (
         db.query(Assignment)
         .filter(

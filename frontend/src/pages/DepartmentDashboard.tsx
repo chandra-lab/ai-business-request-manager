@@ -38,14 +38,11 @@ export function DepartmentDashboard() {
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Team queue</p>
           <h1 className="font-display text-3xl font-semibold">Team workload</h1>
-          <p className="mt-1 text-ink-700">Non-HR requests routed to your department.</p>
+          <p className="mt-1 text-ink-700">
+            Non-HR requests routed to your department — visible to all team members, not only
+            managers.
+          </p>
         </div>
-        <Link
-          to="/app/manager"
-          className="border border-brand-700/30 px-4 py-2.5 text-sm font-semibold text-brand-700 hover:bg-brand-50"
-        >
-          Assignment queue
-        </Link>
       </div>
 
       <MetricGrid
