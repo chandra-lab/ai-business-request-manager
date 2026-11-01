@@ -1,10 +1,10 @@
-"""Department list + admin create."""
+"""Department list + admin create/update/delete."""
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,19 @@ class DepartmentCreate(BaseModel):
     code: str | None = Field(default=None, max_length=32, description="Optional short code; auto from name")
 
 
+class DepartmentUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=2000)
+    manager_user_id: UUID | None = None
+    is_active: bool | None = None
+
+
+class DepartmentDeleteOut(BaseModel):
+    id: UUID | None = None
+    deletion: str  # "soft" | "hard"
+    department: DepartmentOut | None = None
+
+
 @router.get("", response_model=list[DepartmentOut])
 def list_departments(
     db: Session = Depends(get_db),
@@ -60,3 +73,43 @@ def create_department(
         code=body.code,
     )
     return DepartmentOut.model_validate(dept)
+
+
+@router.patch("/{department_id}", response_model=DepartmentOut)
+def update_department(
+    department_id: UUID,
+    body: DepartmentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DepartmentOut:
+    fields = body.model_dump(exclude_unset=True)
+    dept = dept_service.update_department(
+        db,
+        actor=current_user,
+        department_id=department_id,
+        fields=fields,
+    )
+    return DepartmentOut.model_validate(dept)
+
+
+@router.delete("/{department_id}", response_model=DepartmentDeleteOut)
+def delete_department(
+    department_id: UUID,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DepartmentDeleteOut:
+    dept, mode = dept_service.delete_department(
+        db,
+        actor=current_user,
+        department_id=department_id,
+    )
+    if mode == "hard":
+        response.status_code = status.HTTP_200_OK
+        return DepartmentDeleteOut(id=department_id, deletion="hard", department=None)
+    assert dept is not None
+    return DepartmentDeleteOut(
+        id=dept.id,
+        deletion="soft",
+        department=DepartmentOut.model_validate(dept),
+    )

@@ -13,6 +13,7 @@ from app.core.logging import get_logger
 from app.models.ai_analysis import AIAnalysis, AIAnalysisStatus
 from app.models.assignment import Assignment, AssignmentStatus
 from app.models.audit_log import AuditLog
+from app.models.department import Department
 from app.models.request import ConfidentialityLevel, Request, RequestPriority, RequestStatus
 from app.models.request_history import RequestHistory
 from app.models.request_review_queue import RequestReviewQueue, ReviewQueueStatus
@@ -206,19 +207,29 @@ def apply_routing_after_analysis(
         if decision == RoutingDecision.AUTO_ASSIGN:
             decision = RoutingDecision.HUMAN_REVIEW
 
-    if (
-        decision == RoutingDecision.AUTO_ASSIGN
-        and analysis.recommended_department_id is not None
-    ):
+    active_dept_id: UUID | None = None
+    if analysis.recommended_department_id is not None:
+        active_dept = (
+            db.query(Department)
+            .filter(
+                Department.id == analysis.recommended_department_id,
+                Department.is_active.is_(True),
+            )
+            .first()
+        )
+        if active_dept is not None:
+            active_dept_id = active_dept.id
+
+    if decision == RoutingDecision.AUTO_ASSIGN and active_dept_id is not None:
         previous = request.status
         assert_transition(previous, RequestStatus.PENDING_ASSIGNMENT)
-        request.department_id = analysis.recommended_department_id
+        request.department_id = active_dept_id
         request.status = RequestStatus.PENDING_ASSIGNMENT
         request.clarification_required = False
         _ensure_department_assignment(
             db,
             request=request,
-            department_id=analysis.recommended_department_id,
+            department_id=active_dept_id,
         )
         _add_history(
             db,
@@ -233,14 +244,14 @@ def apply_routing_after_analysis(
         )
         notify_department_managers(
             db,
-            department_id=analysis.recommended_department_id,
+            department_id=active_dept_id,
             request_id=request.id,
             title="New request pending assignment",
             body=f"Request '{request.title}' was auto-routed to your department.",
         )
         return decision
 
-    # Missing department on high confidence → treat as review
+    # Missing or inactive department on high confidence → treat as review
     if decision == RoutingDecision.AUTO_ASSIGN:
         decision = RoutingDecision.HUMAN_REVIEW
 
@@ -293,6 +304,14 @@ def assign_department_from_review(
     request = db.query(Request).filter(Request.id == review.request_id).with_for_update().first()
     if request is None:
         raise ValueError("Request not found")
+
+    dept = (
+        db.query(Department)
+        .filter(Department.id == department_id, Department.is_active.is_(True))
+        .first()
+    )
+    if dept is None:
+        raise ValueError("Department not found or inactive")
 
     from datetime import UTC, datetime
 

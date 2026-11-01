@@ -90,9 +90,13 @@ def process_request_analysis(
 
         dept_id = None
         if rec.recommended_department_code:
+            # Inactive departments must not be used for new auto-routing.
             dept = (
                 db.query(Department)
-                .filter(Department.code == rec.recommended_department_code)
+                .filter(
+                    Department.code == rec.recommended_department_code,
+                    Department.is_active.is_(True),
+                )
                 .first()
             )
             if dept:
