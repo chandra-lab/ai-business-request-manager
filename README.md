@@ -1,6 +1,6 @@
 # AIBRM — AI Business Request Manager
 
-Internal request routing for an automotive group. **Phase 4** adds confidence-based routing, review queue, manager assignment, and outbox retries.
+Internal request routing for an automotive group. **Phase 5** adds department/HR authorization, case grants, and audit logging.
 
 Works **without an Anthropic API key** — `AI_PROVIDER=mock` is the default.
 
@@ -171,10 +171,29 @@ Phase 3 worker: on `request.submitted` outbox → `submitted` → `ai_processing
 
 AI-recommended priority is stored on `AIAnalysis.recommended_priority` and audited separately from system `request.priority`.
 
+## Security (Phase 5)
+
+- **Department scope**: managers/dept users see non-HR requests for their department; reviewers see non-HR `pending_review`.
+- **HR boundary**: `is_hr_sensitive` / `highly_confidential` cases are visible to the **requester**, **HR role**, or users with an explicit `HRCaseAccess` grant only.
+- **Admins do not auto-get HR content** — grant required (or HR role).
+- **HRCaseNotes** are separate from request body; requesters can open their case but get **403** on notes.
+- Denied HR view/content attempts are written to `audit_logs`.
+- Attachment downloads use the same visibility rules (requester or HR principals on HR cases).
+- Prompt injection: user title/description are delimited DATA; Mock scenario 5 (Legal) still wins when legal keywords are present alongside override text.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET/POST | `/api/v1/requests/{id}/hr-notes` | HR notes (HR role / grant) |
+| GET/POST | `/api/v1/requests/{id}/hr-access` | List / grant case access |
+| DELETE | `/api/v1/requests/{id}/hr-access/{access_id}` | Revoke grant |
+
+Demo HR account: `hr@aibrm.example.com` / `DemoPass123!`
+
 ## Phase status
 
 - **Phase 1**: foundation
 - **Phase 2**: request management
 - **Phase 3**: AI Mock/Anthropic + outbox
-- **Phase 4 (current)**: confidence routing, review queue, manager assign, retries
-- Phases 5–7: security, dashboards polish, scenario validation
+- **Phase 4**: confidence routing, review queue, manager assign, retries
+- **Phase 5 (current)**: department/HR security, case grants, audit, injection tests
+- Phases 6–7: dashboard polish, scenario validation
