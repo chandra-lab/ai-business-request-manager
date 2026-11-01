@@ -39,22 +39,46 @@ def _add_history(
     )
 
 
-def _enqueue_submitted_outbox(db: Session, request: Request) -> None:
-    """Transactional outbox stub for Phase 3 AI processing."""
-    db.add(
-        OutboxMessage(
-            aggregate_type="request",
-            aggregate_id=request.id,
-            event_type="request.submitted",
-            payload={
-                "request_id": str(request.id),
-                "title": request.title,
-                "requester_id": str(request.requester_id),
-            },
-            status=OutboxStatus.PENDING,
-            idempotency_key=f"request.submitted:{request.id}",
-        )
+def _enqueue_submitted_outbox(db: Session, request: Request) -> OutboxMessage:
+    """Transactional outbox for Phase 3 AI processing (idempotent per request)."""
+    existing = (
+        db.query(OutboxMessage)
+        .filter(OutboxMessage.idempotency_key == f"request.submitted:{request.id}")
+        .first()
     )
+    if existing:
+        return existing
+    msg = OutboxMessage(
+        aggregate_type="request",
+        aggregate_id=request.id,
+        event_type="request.submitted",
+        payload={
+            "request_id": str(request.id),
+            "title": request.title,
+            "requester_id": str(request.requester_id),
+        },
+        status=OutboxStatus.PENDING,
+        idempotency_key=f"request.submitted:{request.id}",
+    )
+    db.add(msg)
+    db.flush()
+    return msg
+
+
+def _dispatch_outbox(outbox_id: UUID) -> None:
+    """Best-effort Celery enqueue; outbox drain recovers if broker is down."""
+    from app.core.config import get_settings
+    from app.core.logging import get_logger
+
+    logger = get_logger(__name__)
+    if get_settings().app_env == "test":
+        return
+    try:
+        from app.modules.workers.tasks import process_outbox_message
+
+        process_outbox_message.delay(str(outbox_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not enqueue outbox %s: %s", outbox_id, exc)
 
 
 def create_request(
@@ -102,11 +126,14 @@ def create_request(
         to_status=initial.value,
         details="Request created" + (" and submitted" if body.submit else " as draft"),
     )
+    outbox_id: UUID | None = None
     if initial == RequestStatus.SUBMITTED:
-        _enqueue_submitted_outbox(db, request)
+        outbox_id = _enqueue_submitted_outbox(db, request).id
 
     db.commit()
     db.refresh(request)
+    if outbox_id is not None:
+        _dispatch_outbox(outbox_id)
     return request, True
 
 
@@ -199,8 +226,11 @@ def update_request(
     if body.status is not None and body.status != request.status:
         _apply_status_change(db, user=user, request=request, target=body.status)
 
+    pending_outbox = getattr(request, "_pending_outbox_id", None)
     db.commit()
     db.refresh(request)
+    if pending_outbox is not None:
+        _dispatch_outbox(pending_outbox)
     return request
 
 
@@ -266,8 +296,13 @@ def _apply_status_change(
         from_status=previous.value,
         to_status=target.value,
     )
+    outbox_id: UUID | None = None
     if target == RequestStatus.SUBMITTED:
-        _enqueue_submitted_outbox(db, request)
+        outbox_id = _enqueue_submitted_outbox(db, request).id
+
+    # Caller commits via update_request; return id via request attribute for dispatch
+    if outbox_id is not None:
+        request._pending_outbox_id = outbox_id  # type: ignore[attr-defined]
 
 
 def list_history(db: Session, request_id: UUID) -> list[RequestHistory]:

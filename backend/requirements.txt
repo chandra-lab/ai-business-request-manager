@@ -21,6 +21,9 @@ PyJWT==2.10.1
 celery==5.4.0
 amqp==5.3.1
 
+# AI (Anthropic optional at runtime; Mock is default)
+anthropic==0.40.0
+
 # Utilities
 python-dotenv==1.0.1
 httpx==0.28.1

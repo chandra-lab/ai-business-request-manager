@@ -80,7 +80,13 @@ class AIAnalysisOut(BaseModel):
     status: str
     confidence: float | None
     recommended_department_id: UUID | None
+    recommended_department_code: str | None = None
     rationale: str | None
+    model_id: str | None = None
+    prompt_version: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    duration_ms: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

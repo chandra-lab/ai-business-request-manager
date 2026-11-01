@@ -1,7 +1,4 @@
-"""Celery application stub for Phase 1.
-
-Phase 3+ will consume outbox messages for AI analysis and assignment.
-"""
+"""Celery application for AIBRM workers."""
 
 from celery import Celery
 
@@ -13,6 +10,7 @@ celery_app = Celery(
     "aibrm",
     broker=settings.broker_url,
     backend=settings.celery_result_backend,
+    include=["app.modules.workers.tasks"],
 )
 
 celery_app.conf.update(
@@ -24,13 +22,11 @@ celery_app.conf.update(
     task_track_started=True,
     worker_hijack_root_logger=False,
     broker_connection_retry_on_startup=True,
+    beat_schedule={
+        # Safety net for pending outbox rows
+        "drain-outbox-every-minute": {
+            "task": "aibrm.drain_outbox",
+            "schedule": 60.0,
+        },
+    },
 )
-
-# Import tasks so Celery registers them
-celery_app.autodiscover_tasks(["app.modules.workers"])
-
-
-@celery_app.task(name="aibrm.ping")
-def ping() -> str:
-    """Health-style stub task so the worker process starts cleanly."""
-    return "pong"

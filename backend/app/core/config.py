@@ -47,6 +47,9 @@ class Settings(BaseSettings):
 
     ai_provider: str = "mock"
     anthropic_api_key: str = ""
+    # Official Claude Haiku 5.5 ID from Anthropic docs: https://platform.claude.com/docs/en/models/haiku-5-5/overview
+    anthropic_model_id: str = "claude-haiku-5-5"
+    anthropic_max_tokens: int = 512
 
     seed_demo_password: str = "DemoPass123!"
 

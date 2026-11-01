@@ -124,8 +124,11 @@ def get_analysis_endpoint(
 ) -> AIAnalysisOut:
     request = get_request_or_404(db, request_id)
     authz.require_view(current_user, request)
+    from sqlalchemy.orm import joinedload
+
     analysis = (
         db.query(AIAnalysis)
+        .options(joinedload(AIAnalysis.recommended_department))
         .filter(AIAnalysis.request_id == request_id)
         .order_by(AIAnalysis.created_at.desc())
         .first()
@@ -134,13 +137,22 @@ def get_analysis_endpoint(
         from fastapi import HTTPException
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not available yet")
+    dept_code = (
+        analysis.recommended_department.code if analysis.recommended_department is not None else None
+    )
     return AIAnalysisOut(
         id=analysis.id,
         provider=analysis.provider,
         status=analysis.status.value if hasattr(analysis.status, "value") else str(analysis.status),
         confidence=float(analysis.confidence) if analysis.confidence is not None else None,
         recommended_department_id=analysis.recommended_department_id,
+        recommended_department_code=dept_code,
         rationale=analysis.rationale,
+        model_id=analysis.model_id,
+        prompt_version=analysis.prompt_version,
+        input_tokens=analysis.input_tokens,
+        output_tokens=analysis.output_tokens,
+        duration_ms=analysis.duration_ms,
         created_at=analysis.created_at,
     )
 

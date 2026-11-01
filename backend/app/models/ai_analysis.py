@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -55,6 +55,11 @@ class AIAnalysis(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     raw_response: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     request: Mapped[Request] = relationship("Request", back_populates="analyses")
     recommended_department: Mapped[Department | None] = relationship("Department")

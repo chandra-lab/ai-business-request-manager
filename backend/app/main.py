@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         description=(
             "AI Business Request Manager — internal request routing for an automotive group. "
-            "Phase 2: request lifecycle, attachments, employee dashboard."
+            "Phase 3: Mock/Anthropic AI analysis via outbox workers."
         ),
         version=__version__,
         lifespan=lifespan,

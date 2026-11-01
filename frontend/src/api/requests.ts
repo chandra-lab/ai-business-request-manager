@@ -1,4 +1,5 @@
 import { getAccessToken } from "../lib/storage";
+import type { AIAnalysis } from "../types/analysis";
 import type {
   EmployeeDashboard,
   RequestDetail,
@@ -81,6 +82,21 @@ export const requestsApi = {
 
   history(id: string) {
     return api<RequestHistoryItem[]>(`/api/v1/requests/${id}/history`);
+  },
+
+  async analysis(id: string): Promise<AIAnalysis | null> {
+    const headers = new Headers();
+    const token = getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(
+      `${API_BASE}/api/v1/requests/${id}/analysis`,
+      { headers },
+    );
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new Error(response.statusText || "Failed to load analysis");
+    }
+    return response.json() as Promise<AIAnalysis>;
   },
 
   dashboard() {
