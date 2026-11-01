@@ -321,6 +321,7 @@ def employee_dashboard(db: Session, user: User) -> dict:
         RequestStatus.SUBMITTED,
         RequestStatus.AI_PROCESSING,
         RequestStatus.PENDING_REVIEW,
+        RequestStatus.PENDING_ASSIGNMENT,
         RequestStatus.ASSIGNED,
         RequestStatus.IN_PROGRESS,
     ]

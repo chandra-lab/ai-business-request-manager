@@ -20,6 +20,10 @@ export function ManagerQueuePage() {
   useEffect(() => {
     if (user?.id) setAssigneeId(user.id);
     load().catch((err: Error) => setError(err.message));
+    const timer = window.setInterval(() => {
+      void load().catch(() => undefined);
+    }, 12000);
+    return () => window.clearInterval(timer);
   }, [user?.id]);
 
   async function onAssign(event: FormEvent, requestId: string) {
@@ -39,12 +43,20 @@ export function ManagerQueuePage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl font-semibold">Manager assignment queue</h1>
-      <p className="mt-1 text-ink-700">
-        Department-routed requests waiting for an individual assignee.
-      </p>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Manager</p>
+          <h1 className="font-display text-3xl font-semibold">Assignment queue</h1>
+          <p className="mt-1 text-ink-700">
+            Department-routed requests waiting for an individual assignee.
+          </p>
+        </div>
+        <Link to="/app/department" className="text-sm text-brand-700 hover:underline">
+          ← Department dashboard
+        </Link>
+      </div>
 
-      <label className="mt-6 block max-w-xl text-sm">
+      <label className="mb-6 block max-w-xl text-sm">
         <span className="text-ink-700">Assignee user UUID (defaults to you)</span>
         <input
           className="mt-1 w-full border border-ink-900/15 px-3 py-2"
@@ -53,9 +65,9 @@ export function ManagerQueuePage() {
         />
       </label>
 
-      {error ? <p className="mt-4 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mb-4 text-sm text-red-700">{error}</p> : null}
 
-      <ul className="mt-6 divide-y divide-ink-900/10 border border-ink-900/10 bg-white/80">
+      <ul className="divide-y divide-ink-900/10 border border-ink-900/10 bg-white/80">
         {items.length === 0 ? (
           <li className="px-4 py-6 text-ink-700">No pending assignments.</li>
         ) : (
@@ -63,7 +75,10 @@ export function ManagerQueuePage() {
             <li key={item.id} className="px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <Link className="font-medium text-brand-700 hover:underline" to={`/app/requests/${item.id}`}>
+                  <Link
+                    className="font-medium text-brand-700 hover:underline"
+                    to={`/app/requests/${item.id}`}
+                  >
                     {item.title}
                   </Link>
                   <p className="text-xs text-ink-700">

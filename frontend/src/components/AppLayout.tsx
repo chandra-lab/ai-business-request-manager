@@ -1,32 +1,46 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { homePathForUser } from "../lib/roleRedirect";
 
 export function AppLayout() {
   const { user, logout, hasRole } = useAuth();
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-app-wash">
       <header className="border-b border-ink-900/10 bg-white/70 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-6">
-            <Link to="/app" className="font-display text-xl font-bold text-brand-700">
+          <div className="flex flex-wrap items-center gap-6">
+            <Link
+              to={user ? homePathForUser(user) : "/app"}
+              className="font-display text-xl font-bold text-brand-700"
+            >
               AIBRM
             </Link>
             <nav className="flex flex-wrap gap-4 text-sm text-ink-700">
               <Link className="hover:text-brand-700" to="/app">
-                Dashboard
+                My requests
               </Link>
               <Link className="hover:text-brand-700" to="/app/requests/new">
                 New request
               </Link>
+              {hasRole("department_manager", "admin") ? (
+                <>
+                  <Link className="hover:text-brand-700" to="/app/department">
+                    Department
+                  </Link>
+                  <Link className="hover:text-brand-700" to="/app/manager">
+                    Assign
+                  </Link>
+                </>
+              ) : null}
               {hasRole("reviewer", "admin") ? (
                 <Link className="hover:text-brand-700" to="/app/review">
-                  Review queue
+                  Review
                 </Link>
               ) : null}
-              {hasRole("department_manager", "admin") ? (
-                <Link className="hover:text-brand-700" to="/app/manager">
-                  Manager queue
+              {hasRole("hr") ? (
+                <Link className="hover:text-brand-700" to="/app/hr">
+                  HR cases
                 </Link>
               ) : null}
             </nav>

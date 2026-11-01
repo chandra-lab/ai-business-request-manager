@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { requestsApi } from "../api/requests";
 import { StatusBadge } from "../components/StatusBadge";
+import { useRequestLiveUpdates } from "../hooks/useRequestLiveUpdates";
 import type { AIAnalysis } from "../types/analysis";
 import type { RequestDetail, RequestHistoryItem } from "../types/requests";
 
@@ -11,6 +12,7 @@ export function RequestDetailPage() {
   const [history, setHistory] = useState<RequestHistoryItem[]>([]);
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [analysisPending, setAnalysisPending] = useState(true);
+  const [liveMode, setLiveMode] = useState<"sse+poll" | "idle">("idle");
   const [error, setError] = useState<string | null>(null);
   const [clarify, setClarify] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,20 +40,20 @@ export function RequestDetailPage() {
     };
   }, [load]);
 
-  useEffect(() => {
-    // Poll until analysis is present (or request leaves early statuses)
-    if (!request) return;
-    if (analysis) return;
-    if (!["submitted", "ai_processing", "draft"].includes(request.status) && request.status !== "cancelled") {
-      // still allow poll briefly after submit path
-    }
-    if (request.status === "cancelled" || request.status === "closed") return;
+  const liveEnabled = Boolean(
+    request &&
+      !["cancelled", "closed"].includes(request.status) &&
+      (analysisPending ||
+        ["submitted", "ai_processing", "pending_review", "pending_assignment"].includes(
+          request.status,
+        )),
+  );
 
-    const timer = window.setInterval(() => {
-      void load().catch(() => undefined);
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [request?.status, analysis, load, request]);
+  useRequestLiveUpdates(id, load, { enabled: liveEnabled });
+
+  useEffect(() => {
+    setLiveMode(liveEnabled ? "sse+poll" : "idle");
+  }, [liveEnabled]);
 
   async function submitDraft() {
     if (!id) return;
@@ -122,9 +124,10 @@ export function RequestDetailPage() {
         <StatusBadge status={request.status} />
       </div>
 
-      {analysisPending && request.status !== "cancelled" ? (
+      {liveMode === "sse+poll" ? (
         <p className="mt-4 border border-brand-500/20 bg-brand-50 px-3 py-2 text-sm text-brand-700">
-          Waiting for AI analysis… polling every 3s (Mock by default; no API key required).
+          Live updates on ({analysisPending ? "waiting for AI analysis" : "status changes"}) —
+          SSE with polling fallback.
         </p>
       ) : null}
 

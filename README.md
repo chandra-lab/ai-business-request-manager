@@ -1,6 +1,6 @@
 # AIBRM — AI Business Request Manager
 
-Internal request routing for an automotive group. **Phase 5** adds department/HR authorization, case grants, and audit logging.
+Internal request routing for an automotive group. **Phase 6** adds role dashboards and live request status updates.
 
 Works **without an Anthropic API key** — `AI_PROVIDER=mock` is the default.
 
@@ -195,5 +195,19 @@ Demo HR account: `hr@aibrm.example.com` / `DemoPass123!`
 - **Phase 2**: request management
 - **Phase 3**: AI Mock/Anthropic + outbox
 - **Phase 4**: confidence routing, review queue, manager assign, retries
-- **Phase 5 (current)**: department/HR security, case grants, audit, injection tests
-- Phases 6–7: dashboard polish, scenario validation
+- **Phase 5**: department/HR security, case grants, audit, injection tests
+- **Phase 6 (current)**: employee / department / manager / review / HR dashboards; SSE+poll live status
+- Phase 7: scenario validation + architecture docs
+
+### Phase 6 UI routes
+
+| Path | Role | Purpose |
+|------|------|---------|
+| `/app` | employee | My requests |
+| `/app/department` | manager / admin | Department workload |
+| `/app/manager` | manager / admin | Assign individuals |
+| `/app/review` | reviewer / admin | Human review queue |
+| `/app/hr` | hr | HR cases + internal notes |
+| `/app/requests/:id` | scoped | Detail with SSE + polling |
+
+Dashboard APIs: `GET /api/v1/dashboard/{employee,department,review,hr}` · Live: `GET /api/v1/requests/{id}/events`

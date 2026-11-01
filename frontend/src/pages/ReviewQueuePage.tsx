@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { dashboardsApi } from "../api/dashboards";
 import { getAccessToken } from "../lib/storage";
 import { routingApi, type ReviewQueueItem } from "../api/routing";
+import { MetricGrid } from "../components/MetricGrid";
 import { StatusBadge } from "../components/StatusBadge";
 
 interface Dept {
@@ -14,14 +16,16 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "";
 
 export function ReviewQueuePage() {
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
+  const [openCount, setOpenCount] = useState(0);
+  const [inReviewCount, setInReviewCount] = useState(0);
   const [departments, setDepartments] = useState<Dept[]>([]);
   const [selectedDept, setSelectedDept] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
-    const [queue, deps] = await Promise.all([
-      routingApi.reviewQueue(),
+    const [dash, deps] = await Promise.all([
+      dashboardsApi.review(),
       fetch(`${API_BASE}/api/v1/departments`, {
         headers: { Authorization: `Bearer ${getAccessToken() || ""}` },
       }).then(async (r) => {
@@ -29,12 +33,18 @@ export function ReviewQueuePage() {
         return r.json() as Promise<Dept[]>;
       }),
     ]);
-    setItems(queue);
+    setItems(dash.items);
+    setOpenCount(dash.open_count);
+    setInReviewCount(dash.in_review_count);
     setDepartments(deps);
   }
 
   useEffect(() => {
     load().catch((err: Error) => setError(err.message));
+    const timer = window.setInterval(() => {
+      void load().catch(() => undefined);
+    }, 12000);
+    return () => window.clearInterval(timer);
   }, []);
 
   async function assign(item: ReviewQueueItem) {
@@ -76,14 +86,26 @@ export function ReviewQueuePage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl font-semibold">Review queue</h1>
-      <p className="mt-1 text-ink-700">
-        Medium/low confidence and AI failures land here. Assign a department or request information.
-      </p>
+      <div className="mb-8">
+        <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Review</p>
+        <h1 className="font-display text-3xl font-semibold">Review queue</h1>
+        <p className="mt-1 text-ink-700">
+          Medium/low confidence and AI failures. Assign a department or request information.
+        </p>
+      </div>
 
-      {error ? <p className="mt-4 text-sm text-red-700">{error}</p> : null}
+      <MetricGrid
+        metrics={[
+          { label: "Open", value: openCount },
+          { label: "In review", value: inReviewCount },
+          { label: "Shown", value: items.length },
+          { label: "Departments", value: departments.length },
+        ]}
+      />
 
-      <ul className="mt-6 divide-y divide-ink-900/10 border border-ink-900/10 bg-white/80">
+      {error ? <p className="mb-4 text-sm text-red-700">{error}</p> : null}
+
+      <ul className="divide-y divide-ink-900/10 border border-ink-900/10 bg-white/80">
         {items.length === 0 ? (
           <li className="px-4 py-6 text-ink-700">Queue is empty.</li>
         ) : (
