@@ -24,6 +24,7 @@ frontend/.env
 frontend/.env.local
 *.log
 npm-debug.log*
+*.tsbuildinfo
 
 # IDE / OS
 .idea/
