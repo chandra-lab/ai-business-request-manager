@@ -17,10 +17,12 @@ def test_department_dashboard_manager(client, auth_headers):
     assert "pending_assignment_count" in resp.json()
 
 
-def test_department_dashboard_forbidden_for_employee(client, auth_headers):
+def test_department_dashboard_ok_for_department_member(client, auth_headers):
+    """Department members (not only managers) may open the team dashboard."""
     headers = auth_headers("employee@aibrm.example.com")
     resp = client.get("/api/v1/dashboard/department", headers=headers)
-    assert resp.status_code == 403
+    assert resp.status_code == 200
+    assert "pending_assignment_count" in resp.json()
 
 
 def test_hr_dashboard_requires_hr(client, auth_headers):

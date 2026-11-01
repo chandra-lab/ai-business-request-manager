@@ -34,6 +34,7 @@ export interface Attachment {
 
 export interface RequestDetail extends RequestSummary {
   description: string;
+  description_redacted?: boolean;
   attachments: Attachment[];
 }
 

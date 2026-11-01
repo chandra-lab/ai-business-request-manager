@@ -15,6 +15,13 @@ from app.modules.requests import authz
 def _can_comment(db: Session, user: User, request: Request) -> bool:
     if not authz.can_view_request(db, user, request):
         return False
+    if authz.is_hr_protected(db, request):
+        # HR cases: requester, HR, reviewer, or grant holders only
+        if authz.can_edit_as_requester(user, request):
+            return True
+        if authz.is_hr(user) or authz.is_reviewer(user):
+            return True
+        return authz.has_active_hr_case_access(db, user.id, request.id)
     if authz.can_edit_as_requester(user, request):
         return True
     if authz.is_admin(user) or authz.is_manager(user) or authz.is_reviewer(user) or authz.is_hr(user):
@@ -35,6 +42,8 @@ def _can_comment(db: Session, user: User, request: Request) -> bool:
 
 def list_comments(db: Session, *, user: User, request: Request) -> list[RequestComment]:
     authz.require_view(db, user, request)
+    # Comment thread is for requester ↔ authorized handlers; HR-internal notes
+    # stay on the separate hr-notes endpoints.
     return (
         db.query(RequestComment)
         .options(joinedload(RequestComment.author))

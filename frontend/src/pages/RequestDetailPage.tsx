@@ -701,10 +701,17 @@ export function RequestDetailPage() {
 
           <section className="border border-ink-900/10 bg-white/80 p-5">
             <h2 className="font-display text-lg font-semibold">Description</h2>
-            <p className="mt-2 whitespace-pre-wrap text-ink-900">{request.description}</p>
+            {request.description_redacted ? (
+              <p className="mt-2 border border-ink-900/10 bg-ink-50 px-3 py-2 text-sm text-ink-700">
+                Confidential HR case content is only visible to HR and reviewers. You can still track
+                status and use comments for updates.
+              </p>
+            ) : (
+              <p className="mt-2 whitespace-pre-wrap text-ink-900">{request.description}</p>
+            )}
           </section>
 
-          {isStaff ? (
+          {isStaff && (hasRole("hr") || hasRole("reviewer") || !request.is_hr_sensitive) ? (
             <section className="border border-ink-900/10 bg-white/80 p-5">
               <h2 className="font-display text-lg font-semibold">AI analysis</h2>
               {analysis ? (
@@ -725,10 +732,12 @@ export function RequestDetailPage() {
                         : "—"}
                     </dd>
                   </div>
-                  <div className="sm:col-span-2">
-                    <dt className="text-xs uppercase tracking-wide text-ink-700">Rationale</dt>
-                    <dd className="mt-1 text-ink-900">{analysis.rationale}</dd>
-                  </div>
+                  {analysis.rationale ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs uppercase tracking-wide text-ink-700">Rationale</dt>
+                      <dd className="mt-1 text-ink-900">{analysis.rationale}</dd>
+                    </div>
+                  ) : null}
                 </dl>
               ) : (
                 <p className="mt-2 text-sm text-ink-700">No analysis yet.</p>

@@ -39,6 +39,18 @@ from app.schemas.requests import (
 router = APIRouter(prefix="/requests", tags=["requests"])
 
 
+def _request_detail_for(db: Session, user: User, request) -> RequestDetail:
+    """Serialize detail with HR body redaction when the viewer is not authorized."""
+    description, redacted = authz.redact_description_if_needed(db, user, request)
+    payload = RequestDetail.model_validate(request)
+    payload.description = description
+    payload.description_redacted = redacted
+    if redacted:
+        # Do not expose attachment metadata that may name sensitive files
+        payload.attachments = []
+    return payload
+
+
 @router.post("", response_model=RequestDetail, status_code=status.HTTP_201_CREATED)
 def create_request_endpoint(
     body: RequestCreate,
@@ -56,7 +68,10 @@ def create_request_endpoint(
     if not created:
         response.status_code = status.HTTP_200_OK
     detail = get_request_or_404(db, request.id)
-    return RequestDetail.model_validate(detail)
+    # Creator just wrote the body — return it so the form confirmation is intact.
+    payload = RequestDetail.model_validate(detail)
+    payload.description_redacted = False
+    return payload
 
 
 @router.get("", response_model=RequestListResponse)
@@ -92,7 +107,7 @@ def get_request_endpoint(
 ) -> RequestDetail:
     request = get_request_or_404(db, request_id)
     authz.require_view(db, current_user, request)
-    return RequestDetail.model_validate(request)
+    return _request_detail_for(db, current_user, request)
 
 
 @router.patch("/{request_id}", response_model=RequestDetail)
@@ -105,7 +120,7 @@ def patch_request_endpoint(
     request = get_request_or_404(db, request_id)
     updated = update_request(db, user=current_user, request=request, body=body)
     refreshed = get_request_or_404(db, updated.id)
-    return RequestDetail.model_validate(refreshed)
+    return _request_detail_for(db, current_user, refreshed)
 
 
 @router.get("/{request_id}/history", response_model=list[RequestHistoryOut])
@@ -179,9 +194,11 @@ def get_analysis_endpoint(
         from fastapi import HTTPException
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not available yet")
+    can_body = authz.can_read_hr_case_body(db, current_user, request)
     dept_code = (
         analysis.recommended_department.code if analysis.recommended_department is not None else None
     )
+    # Hide AI rationale (may echo sensitive description) from non-body readers.
     return AIAnalysisOut(
         id=analysis.id,
         provider=analysis.provider,
@@ -190,12 +207,12 @@ def get_analysis_endpoint(
         recommended_department_id=analysis.recommended_department_id,
         recommended_department_code=dept_code,
         recommended_priority=analysis.recommended_priority,
-        rationale=analysis.rationale,
-        model_id=analysis.model_id,
-        prompt_version=analysis.prompt_version,
-        input_tokens=analysis.input_tokens,
-        output_tokens=analysis.output_tokens,
-        duration_ms=analysis.duration_ms,
+        rationale=analysis.rationale if can_body else None,
+        model_id=analysis.model_id if can_body else None,
+        prompt_version=analysis.prompt_version if can_body else None,
+        input_tokens=analysis.input_tokens if can_body else None,
+        output_tokens=analysis.output_tokens if can_body else None,
+        duration_ms=analysis.duration_ms if can_body else None,
         created_at=analysis.created_at,
     )
 

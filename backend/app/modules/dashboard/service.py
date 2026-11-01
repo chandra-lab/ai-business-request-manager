@@ -12,14 +12,18 @@ from app.modules.requests import authz
 
 
 def department_dashboard(db: Session, user: User) -> dict:
-    """Team queue for department managers and department members."""
-    if authz.is_admin(user):
-        q = db.query(Request).filter(Request.is_hr_sensitive.is_(False))
+    """Team queue for department managers and department members.
+
+    HR-protected / HR-department tickets never appear on non-HR team dashboards.
+    """
+    if authz.is_hr(user) and user.department_id:
+        # HR specialists use the HR desk; if they open team view, show their dept only.
+        q = db.query(Request).filter(Request.department_id == user.department_id)
+    elif authz.is_admin(user):
+        q = authz.apply_exclude_hr_protected(db.query(Request), db)
     elif user.department_id:
-        q = db.query(Request).filter(
-            Request.is_hr_sensitive.is_(False),
-            Request.department_id == user.department_id,
-        )
+        q = db.query(Request).filter(Request.department_id == user.department_id)
+        q = authz.apply_exclude_hr_protected(q, db)
         if not authz.is_manager(user):
             q = q.filter(
                 Request.status.in_(
@@ -93,20 +97,32 @@ def review_dashboard(db: Session, user: User) -> dict:
     }
 
 
+def _hr_desk_filter(db: Session):
+    """Sensitive, highly confidential, or Human Resources department tickets."""
+    from sqlalchemy import or_
+
+    hr_ids = authz.hr_department_ids(db)
+    clauses = [
+        Request.is_hr_sensitive.is_(True),
+        Request.confidentiality == ConfidentialityLevel.HIGHLY_CONFIDENTIAL,
+    ]
+    if hr_ids:
+        clauses.append(Request.department_id.in_(hr_ids))
+    return or_(*clauses)
+
+
 def hr_dashboard(db: Session, user: User) -> dict:
     if not authz.is_hr(user):
         return {"case_count": 0, "highly_confidential_count": 0, "recent": []}
 
+    base = db.query(Request).filter(_hr_desk_filter(db))
     case_count = int(
-        db.query(func.count(Request.id))
-        .filter(Request.is_hr_sensitive.is_(True))
-        .scalar()
-        or 0
+        base.with_entities(func.count(Request.id)).order_by(None).scalar() or 0
     )
     highly = int(
         db.query(func.count(Request.id))
         .filter(
-            Request.is_hr_sensitive.is_(True),
+            _hr_desk_filter(db),
             Request.confidentiality == ConfidentialityLevel.HIGHLY_CONFIDENTIAL,
         )
         .scalar()
@@ -114,7 +130,7 @@ def hr_dashboard(db: Session, user: User) -> dict:
     )
     recent = (
         db.query(Request)
-        .filter(Request.is_hr_sensitive.is_(True))
+        .filter(_hr_desk_filter(db))
         .order_by(Request.updated_at.desc())
         .limit(20)
         .all()

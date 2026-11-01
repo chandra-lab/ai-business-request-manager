@@ -139,37 +139,48 @@ def list_assignable_users(db: Session, *, actor: User, request: Request) -> list
 
 
 def list_manager_queue(db: Session, manager: User) -> list[Request]:
-    """Pending assignment (+ assigned) for the manager's department."""
-    if authz.is_admin(manager):
+    """Pending assignment (+ assigned) for the manager's department.
+
+    Excludes HR-protected / HR-department tickets from non-HR manager queues.
+    """
+    if authz.is_admin(manager) and not authz.is_hr(manager):
+        q = db.query(Request).filter(
+            Request.status.in_(
+                [
+                    RequestStatus.PENDING_ASSIGNMENT,
+                    RequestStatus.ASSIGNED,
+                ]
+            ),
+        )
+        q = authz.apply_exclude_hr_protected(q, db)
+        return q.order_by(Request.created_at.desc()).all()
+    if authz.is_hr(manager) and manager.department_id:
         return (
             db.query(Request)
             .filter(
+                Request.department_id == manager.department_id,
                 Request.status.in_(
                     [
                         RequestStatus.PENDING_ASSIGNMENT,
                         RequestStatus.ASSIGNED,
+                        RequestStatus.IN_PROGRESS,
                     ]
                 ),
-                Request.is_hr_sensitive.is_(False),
             )
             .order_by(Request.created_at.desc())
             .all()
         )
     if not authz.is_manager(manager) or not manager.department_id:
         return []
-    return (
-        db.query(Request)
-        .filter(
-            Request.department_id == manager.department_id,
-            Request.is_hr_sensitive.is_(False),
-            Request.status.in_(
-                [
-                    RequestStatus.PENDING_ASSIGNMENT,
-                    RequestStatus.ASSIGNED,
-                    RequestStatus.IN_PROGRESS,
-                ]
-            ),
-        )
-        .order_by(Request.created_at.desc())
-        .all()
+    q = db.query(Request).filter(
+        Request.department_id == manager.department_id,
+        Request.status.in_(
+            [
+                RequestStatus.PENDING_ASSIGNMENT,
+                RequestStatus.ASSIGNED,
+                RequestStatus.IN_PROGRESS,
+            ]
+        ),
     )
+    q = authz.apply_exclude_hr_protected(q, db)
+    return q.order_by(Request.created_at.desc()).all()

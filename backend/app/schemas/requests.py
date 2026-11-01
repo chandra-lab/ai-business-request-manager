@@ -88,6 +88,7 @@ class RequestSummary(BaseModel):
 
 class RequestDetail(RequestSummary):
     description: str
+    description_redacted: bool = False
     attachments: list[AttachmentOut] = []
 
 

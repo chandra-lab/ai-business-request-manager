@@ -34,10 +34,10 @@ def add_note(
     request: Request,
     content: str,
 ) -> HRCaseNote:
-    if not authz.is_hr_case(request):
+    if not authz.is_hr_protected(db, request):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="HR notes only allowed on HR-sensitive cases",
+            detail="HR notes only allowed on HR-protected cases",
         )
     authz.require_view(db, user, request)
     authz.require_hr_content(db, user, request)
@@ -67,10 +67,10 @@ def grant_access(
     request: Request,
     grantee_id: UUID,
 ) -> HRCaseAccess:
-    if not authz.is_hr_case(request):
+    if not authz.is_hr_protected(db, request):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Access grants only apply to HR-sensitive cases",
+            detail="Access grants only apply to HR-protected cases",
         )
     if not authz.is_hr(granter):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="HR role required to grant")

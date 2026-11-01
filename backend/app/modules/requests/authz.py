@@ -36,11 +36,56 @@ def is_hr(user: User) -> bool:
     return "hr" in role_set(user)
 
 
+# Seeded / product HR team codes — tickets here are HR-protected even if flags lag.
+HR_DEPARTMENT_CODES = frozenset({"HR"})
+
+
 def is_hr_case(request: Request) -> bool:
     return bool(
         request.is_hr_sensitive
         or request.confidentiality == ConfidentialityLevel.HIGHLY_CONFIDENTIAL
     )
+
+
+def hr_department_ids(db: Session) -> list[UUID]:
+    from app.models.department import Department
+
+    rows = (
+        db.query(Department.id)
+        .filter(Department.code.in_(list(HR_DEPARTMENT_CODES)))
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def is_hr_department_request(db: Session, request: Request) -> bool:
+    if request.department_id is None:
+        return False
+    return request.department_id in set(hr_department_ids(db))
+
+
+def is_hr_protected(db: Session, request: Request) -> bool:
+    """Sensitive / highly confidential / Human Resources department tickets."""
+    return is_hr_case(request) or is_hr_department_request(db, request)
+
+
+def non_hr_team_predicate():
+    """SQLAlchemy filter: exclude sensitive + highly confidential (dept filter separate)."""
+    return and_(
+        Request.is_hr_sensitive.is_(False),
+        Request.confidentiality == ConfidentialityLevel.STANDARD,
+    )
+
+
+def apply_exclude_hr_protected(query: Any, db: Session) -> Any:
+    """Drop HR-protected tickets from non-HR team queues / dashboards."""
+    hr_ids = hr_department_ids(db)
+    query = query.filter(non_hr_team_predicate())
+    if hr_ids:
+        query = query.filter(
+            or_(Request.department_id.is_(None), Request.department_id.notin_(hr_ids))
+        )
+    return query
 
 
 def has_active_hr_case_access(db: Session, user_id: UUID, request_id: UUID) -> bool:
@@ -62,12 +107,41 @@ def has_active_hr_case_access(db: Session, user_id: UUID, request_id: UUID) -> b
 
 
 def can_access_hr_content(db: Session, user: User, request: Request) -> bool:
-    """HR case content (notes, sensitive internals). Admin alone is NOT enough."""
-    if not is_hr_case(request):
+    """Internal HR notes / grants. Admin alone is NOT enough; reviewers are not enough."""
+    if not is_hr_protected(db, request):
         return True
     if is_hr(user):
         return True
     return has_active_hr_case_access(db, user.id, request.id)
+
+
+def can_read_hr_case_body(db: Session, user: User, request: Request) -> bool:
+    """Full description / sensitive body for HR-protected cases.
+
+    Allowed: the requester (own submission), HR role, reviewer, or explicit grant.
+    Non-HR managers/members and other employees never receive the body — they are
+    denied by ``can_view_request`` (404) or get a redacted placeholder if they
+    somehow reach serialization.
+    """
+    if not is_hr_protected(db, request):
+        return True
+    if request.requester_id == user.id:
+        return True
+    if is_hr(user) or is_reviewer(user):
+        return True
+    return has_active_hr_case_access(db, user.id, request.id)
+
+
+HR_BODY_REDACTION = (
+    "[Redacted] Confidential HR case content is only visible to HR and reviewers."
+)
+
+
+def redact_description_if_needed(db: Session, user: User, request: Request) -> tuple[str, bool]:
+    """Return (description, was_redacted) for API serialization."""
+    if can_read_hr_case_body(db, user, request):
+        return request.description, False
+    return HR_BODY_REDACTION, True
 
 
 def is_same_department(user: User, request: Request) -> bool:
@@ -89,15 +163,17 @@ _DEPT_VISIBLE_STATUSES = {
 def can_view_request(db: Session, user: User, request: Request) -> bool:
     """Who may open a request record.
 
-    HR-sensitive cases: requester, HR role, or explicit HRCaseAccess only.
-    Admins do **not** automatically see HR cases.
-    Department **members** (not only managers) see non-HR tickets for their dept
-    once routed (pending assignment onward).
+    HR-protected cases (sensitive / highly confidential / HR department):
+    requester (own summary), HR role, reviewer, or explicit HRCaseAccess.
+    Admins and non-HR dept members do **not** automatically see HR cases.
+    Department members see non-HR tickets for their dept once routed.
     """
-    if is_hr_case(request):
+    if is_hr_protected(db, request):
         if request.requester_id == user.id:
             return True
-        return can_access_hr_content(db, user, request)
+        if is_hr(user) or is_reviewer(user):
+            return True
+        return has_active_hr_case_access(db, user.id, request.id)
 
     if request.requester_id == user.id:
         return True
@@ -143,10 +219,8 @@ def can_view_internal_history(db: Session, user: User, request: Request | None =
 
 def can_work_request(db: Session, user: User, request: Request) -> bool:
     """Progress status / work the ticket: assignee, dept member, manager, or admin."""
-    if is_hr_case(request):
-        return can_access_hr_content(db, user, request) and (
-            is_hr(user) or is_admin(user)
-        )
+    if is_hr_protected(db, request):
+        return can_access_hr_content(db, user, request) and is_hr(user)
     if is_admin(user):
         return True
     if is_manager(user) and is_same_department(user, request):
@@ -169,7 +243,7 @@ def can_work_request(db: Session, user: User, request: Request) -> bool:
 
 def can_assign_individual(db: Session, user: User, request: Request) -> bool:
     """Managers of the request dept, reviewers (after dept set), or admins."""
-    if is_hr_case(request):
+    if is_hr_protected(db, request):
         return can_access_hr_content(db, user, request) and is_hr(user)
     if is_admin(user):
         return True
@@ -192,8 +266,10 @@ def can_set_priority(db: Session, user: User, request: Request) -> bool:
     ticket already has a department; reviewers/admins may set it earlier (e.g.
     during pending_review).
     """
-    if is_hr_case(request) and not can_access_hr_content(db, user, request):
-        return False
+    if is_hr_protected(db, request):
+        return can_read_hr_case_body(db, user, request) and (
+            is_hr(user) or is_reviewer(user) or has_active_hr_case_access(db, user.id, request.id)
+        )
     if is_admin(user) or is_reviewer(user):
         return True
     if (
@@ -224,7 +300,7 @@ def require_view(
         details="Denied request view",
         ip_address=ip_address,
         metadata={
-            "is_hr_case": is_hr_case(request),
+            "is_hr_case": is_hr_protected(db, request),
             "roles": sorted(role_set(user)),
         },
         commit=True,
@@ -239,7 +315,7 @@ def require_hr_content(
     *,
     ip_address: str | None = None,
 ) -> None:
-    """Require HR role or case grant. Call after require_view when needed."""
+    """Require HR role or case grant for notes. Call after require_view when needed."""
     if can_access_hr_content(db, user, request):
         write_audit(
             db,
@@ -263,7 +339,7 @@ def require_hr_content(
         metadata={"roles": sorted(role_set(user))},
         commit=True,
     )
-    # Requester can see the request but not notes → 403; others already 404'd on view
+    # Requester/reviewer can open the ticket but not notes → 403; others already 404'd on view
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="HR case content access denied",
@@ -277,12 +353,12 @@ def can_edit_as_requester(user: User, request: Request) -> bool:
 def can_download_attachment(db: Session, user: User, request: Request) -> bool:
     if not can_view_request(db, user, request):
         return False
-    if not is_hr_case(request):
+    if not is_hr_protected(db, request):
         return True
-    # HR case attachments: requester (own uploads) or HR content principals
+    # HR case attachments: requester (own uploads) or HR body principals
     if request.requester_id == user.id:
         return True
-    return can_access_hr_content(db, user, request)
+    return can_read_hr_case_body(db, user, request)
 
 
 def require_attachment_download(
@@ -311,8 +387,15 @@ def require_attachment_download(
 
 def apply_list_scope(query: Any, user: User, db: Session) -> Any:
     """Restrict list queries by role and HR boundary."""
+    hr_ids = hr_department_ids(db)
+    not_hr_dept = (
+        or_(Request.department_id.is_(None), Request.department_id.notin_(hr_ids))
+        if hr_ids
+        else true_clause()
+    )
+
     if is_admin(user) and not is_hr(user):
-        # Admin sees non-HR cases only (unless also HR or granted — grants are per-case)
+        # Admin sees non-HR-protected cases only (unless also HR or granted)
         granted_ids = [
             r.request_id
             for r in db.query(HRCaseAccess)
@@ -321,10 +404,7 @@ def apply_list_scope(query: Any, user: User, db: Session) -> Any:
         ]
         return query.filter(
             or_(
-                and_(
-                    Request.is_hr_sensitive.is_(False),
-                    Request.confidentiality == ConfidentialityLevel.STANDARD,
-                ),
+                and_(non_hr_team_predicate(), not_hr_dept),
                 Request.requester_id == user.id,
                 Request.id.in_(granted_ids) if granted_ids else false(),
             )
@@ -333,43 +413,38 @@ def apply_list_scope(query: Any, user: User, db: Session) -> Any:
     roles = role_set(user)
     clauses = [Request.requester_id == user.id]
 
-    if user.department_id is not None:
+    if user.department_id is not None and "hr" not in roles:
+        # Non-HR managers/members: never list HR-protected / HR-department tickets
         if "department_manager" in roles:
-            # Managers see all non-HR tickets for their department
             clauses.append(
                 and_(
                     Request.department_id == user.department_id,
-                    Request.is_hr_sensitive.is_(False),
-                    Request.confidentiality == ConfidentialityLevel.STANDARD,
+                    non_hr_team_predicate(),
+                    not_hr_dept,
                 )
             )
         else:
-            # Department members (employees) see routed work for their team
             clauses.append(
                 and_(
                     Request.department_id == user.department_id,
-                    Request.is_hr_sensitive.is_(False),
-                    Request.confidentiality == ConfidentialityLevel.STANDARD,
+                    non_hr_team_predicate(),
+                    not_hr_dept,
                     Request.status.in_(list(_DEPT_VISIBLE_STATUSES)),
                 )
             )
 
     if "reviewer" in roles:
-        clauses.append(
-            and_(
-                Request.status == RequestStatus.PENDING_REVIEW,
-                Request.is_hr_sensitive.is_(False),
-                Request.confidentiality == ConfidentialityLevel.STANDARD,
-            )
-        )
+        # Reviewers see pending review including HR-protected (for routing decisions)
+        clauses.append(Request.status == RequestStatus.PENDING_REVIEW)
 
     if "hr" in roles:
-        clauses.append(
-            or_(
-                Request.is_hr_sensitive.is_(True),
-                Request.confidentiality == ConfidentialityLevel.HIGHLY_CONFIDENTIAL,
-            )
+        hr_clause = or_(
+            Request.is_hr_sensitive.is_(True),
+            Request.confidentiality == ConfidentialityLevel.HIGHLY_CONFIDENTIAL,
         )
+        if hr_ids:
+            hr_clause = or_(hr_clause, Request.department_id.in_(hr_ids))
+        clauses.append(hr_clause)
 
     # Explicit case grants
     granted = (
@@ -382,12 +457,12 @@ def apply_list_scope(query: Any, user: User, db: Session) -> Any:
         clauses.append(Request.id.in_(granted_ids))
 
     if is_admin(user) and is_hr(user):
-        # HR+admin: union of admin non-HR and HR cases — hr clause already covers sensitive
-        clauses.append(
-            and_(
-                Request.is_hr_sensitive.is_(False),
-                Request.confidentiality == ConfidentialityLevel.STANDARD,
-            )
-        )
+        clauses.append(and_(non_hr_team_predicate(), not_hr_dept))
 
     return query.filter(or_(*clauses))
+
+
+def true_clause():
+    from sqlalchemy import true
+
+    return true()
