@@ -13,6 +13,8 @@ Works **without an Anthropic API key** — `AI_PROVIDER=mock` is the default.
 | Scenarios 1–6 | [`docs/scenarios.md`](docs/scenarios.md) |
 | Limitations | [`docs/limitations.md`](docs/limitations.md) |
 
+Assessment pack teams (for admin create / mapping notes): `IT Support`, `Finance`, `Operations`, `HR Operations`, `Restricted HR Review`, `General Administration`, `Manual Review` — see store pack `internal/assessment-data-pack/.../teams.csv`. Full CSV import is out of scope; admins create departments in **Admin → Departments** (`/app/admin/departments`).
+
 ## Quick start (Docker Compose)
 
 ```bash

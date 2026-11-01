@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AdminDepartmentsPage } from "./pages/AdminDepartmentsPage";
 import { DepartmentDashboard } from "./pages/DepartmentDashboard";
 import { EmployeeDashboard } from "./pages/EmployeeDashboard";
 import { HRDashboard } from "./pages/HRDashboard";
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="manager" element={<ManagerQueuePage />} />
           <Route path="review" element={<ReviewQueuePage />} />
           <Route path="hr" element={<HRDashboard />} />
+          <Route path="admin/departments" element={<AdminDepartmentsPage />} />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/app" replace />} />

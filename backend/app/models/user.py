@@ -31,7 +31,11 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    department: Mapped[Department | None] = relationship("Department", back_populates="users")
+    department: Mapped[Department | None] = relationship(
+        "Department",
+        back_populates="users",
+        foreign_keys=[department_id],
+    )
     user_roles: Mapped[list[UserRole]] = relationship(
         "UserRole",
         back_populates="user",

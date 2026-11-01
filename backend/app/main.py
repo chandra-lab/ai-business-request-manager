@@ -7,7 +7,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routes import auth, dashboard, departments, events, health, hr, manager, requests, review
+from app.api.routes import (
+    auth,
+    dashboard,
+    departments,
+    events,
+    health,
+    hr,
+    manager,
+    requests,
+    review,
+    users,
+)
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 
@@ -64,6 +75,7 @@ def create_app() -> FastAPI:
     application.include_router(departments.router, prefix=settings.api_v1_prefix)
     application.include_router(hr.router, prefix=settings.api_v1_prefix)
     application.include_router(events.router, prefix=settings.api_v1_prefix)
+    application.include_router(users.router, prefix=settings.api_v1_prefix)
 
     return application
 

@@ -43,6 +43,11 @@ export function AppLayout() {
                   HR cases
                 </Link>
               ) : null}
+              {hasRole("admin") ? (
+                <Link className="hover:text-brand-700" to="/app/admin/departments">
+                  Departments
+                </Link>
+              ) : null}
             </nav>
           </div>
           <div className="flex items-center gap-4">
