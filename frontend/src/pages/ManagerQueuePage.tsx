@@ -46,13 +46,13 @@ export function ManagerQueuePage() {
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Manager</p>
-          <h1 className="font-display text-3xl font-semibold">Assignment queue</h1>
+          <h1 className="font-display text-3xl font-semibold">Assignments</h1>
           <p className="mt-1 text-ink-700">
-            Department-routed requests waiting for an individual assignee.
+            Department-routed tickets waiting for an individual assignee.
           </p>
         </div>
         <Link to="/app/department" className="text-sm text-brand-700 hover:underline">
-          ← Department dashboard
+          ← Team queue
         </Link>
       </div>
 

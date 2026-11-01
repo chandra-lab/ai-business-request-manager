@@ -36,8 +36,8 @@ export function DepartmentDashboard() {
     <div>
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Department</p>
-          <h1 className="font-display text-3xl font-semibold">Department workload</h1>
+          <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Team queue</p>
+          <h1 className="font-display text-3xl font-semibold">Team workload</h1>
           <p className="mt-1 text-ink-700">Non-HR requests routed to your department.</p>
         </div>
         <Link
