@@ -85,6 +85,10 @@ export function LoginPage() {
           >
             {submitting ? "Signing in…" : "Sign in"}
           </button>
+
+          <p className="mt-4 text-center text-[11px] text-ink-700">
+            API via same origin (proxy). Build stamp: proxy-fix-2026-11-01
+          </p>
         </form>
       </div>
     </div>
