@@ -181,7 +181,7 @@ export function AdminDepartmentsPage() {
     <div>
       <div className="mb-8">
         <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Admin</p>
-        <h1 className="font-display text-3xl font-semibold">Departments / teams</h1>
+        <h1 className="font-display text-3xl font-semibold">Departments</h1>
         <p className="mt-1 text-ink-700">
           Create and manage teams such as IT Support, Finance, Operations, HR Operations,
           Restricted HR Review, General Administration, or Manual Review. Inactive teams stay

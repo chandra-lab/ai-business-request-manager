@@ -87,10 +87,11 @@ export function ReviewQueuePage() {
   return (
     <div>
       <div className="mb-8">
-        <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Review</p>
-        <h1 className="font-display text-3xl font-semibold">Review queue</h1>
+        <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Review queue</p>
+        <h1 className="font-display text-3xl font-semibold">Pending review</h1>
         <p className="mt-1 text-ink-700">
-          Medium/low confidence and AI failures. Assign a department or request information.
+          Medium/low confidence and AI failures. Open a ticket for Jira-style actions, or assign a
+          department here.
         </p>
       </div>
 

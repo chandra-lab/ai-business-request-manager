@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { requestsApi } from "../api/requests";
+import { routingApi, type ReviewQueueItem } from "../api/routing";
 import { StatusBadge } from "../components/StatusBadge";
 import { useAuth } from "../hooks/useAuth";
 import { useRequestLiveUpdates } from "../hooks/useRequestLiveUpdates";
@@ -21,11 +22,19 @@ interface AssignableUser {
   full_name: string;
 }
 
+interface DeptOption {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+}
+
 export function RequestDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { hasRole, user } = useAuth();
   const isStaff = hasRole("admin", "department_manager", "reviewer", "hr");
-  const canAssign = hasRole("admin", "department_manager", "reviewer");
+  const canReviewRoute = hasRole("admin", "reviewer");
+  const canAssignPerson = hasRole("admin", "department_manager", "reviewer");
 
   const [request, setRequest] = useState<RequestDetail | null>(null);
   const [history, setHistory] = useState<RequestHistoryItem[]>([]);
@@ -39,6 +48,10 @@ export function RequestDetailPage() {
   const [busy, setBusy] = useState(false);
   const [assignable, setAssignable] = useState<AssignableUser[]>([]);
   const [assigneeId, setAssigneeId] = useState("");
+  const [departments, setDepartments] = useState<DeptOption[]>([]);
+  const [selectedDeptId, setSelectedDeptId] = useState("");
+  const [openReview, setOpenReview] = useState<ReviewQueueItem | null>(null);
+  const [infoMessage, setInfoMessage] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -54,8 +67,31 @@ export function RequestDetailPage() {
     setAnalysisPending(analysisResult === null);
     setComments(commentList);
 
+    if (canReviewRoute || canAssignPerson) {
+      try {
+        const deps = await routingApi.departments();
+        setDepartments(deps.filter((d) => d.is_active !== false));
+      } catch {
+        setDepartments([]);
+      }
+    }
+
+    if (canReviewRoute && detail.status === "pending_review") {
+      try {
+        const review = await routingApi.openReviewForRequest(id);
+        setOpenReview(review);
+      } catch {
+        setOpenReview(null);
+      }
+      if (analysisResult?.recommended_department_id) {
+        setSelectedDeptId((cur) => cur || analysisResult.recommended_department_id || "");
+      }
+    } else {
+      setOpenReview(null);
+    }
+
     if (
-      canAssign &&
+      canAssignPerson &&
       detail.department_id &&
       ["pending_assignment", "assigned", "in_progress"].includes(detail.status)
     ) {
@@ -66,8 +102,10 @@ export function RequestDetailPage() {
       } catch {
         setAssignable([]);
       }
+    } else {
+      setAssignable([]);
     }
-  }, [id, canAssign]);
+  }, [id, canReviewRoute, canAssignPerson]);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,7 +192,7 @@ export function RequestDetailPage() {
     }
   }
 
-  async function onAssign(event: FormEvent) {
+  async function onAssignPerson(event: FormEvent) {
     event.preventDefault();
     if (!id || !assigneeId) return;
     setBusy(true);
@@ -169,208 +207,403 @@ export function RequestDetailPage() {
     }
   }
 
+  async function onRouteDepartment(event: FormEvent) {
+    event.preventDefault();
+    if (!id || !selectedDeptId) {
+      setError("Select a department to route");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await routingApi.assignDepartmentForRequest(id, {
+        department_id: selectedDeptId,
+        decision_reason: "Routed from ticket detail",
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Route failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onRequestInfo(event: FormEvent) {
+    event.preventDefault();
+    if (!id || !infoMessage.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await routingApi.requestInformationForRequest(id, infoMessage.trim());
+      setInfoMessage("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request information failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error && !request) {
     return <p className="text-red-700">{error}</p>;
   }
   if (!request) {
-    return <p className="text-ink-700">Loading request…</p>;
+    return <p className="text-ink-700">Loading ticket…</p>;
   }
 
   const isRequester = user?.id === request.requester_id;
+  const showStaffActions = isStaff;
+  const showReviewActions = canReviewRoute && request.status === "pending_review";
+  const showPersonAssign =
+    canAssignPerson &&
+    Boolean(request.department_id) &&
+    ["pending_assignment", "assigned", "in_progress"].includes(request.status);
 
-  return (
-    <div>
-      <p className="mb-4 text-sm">
-        <Link to="/app" className="text-brand-700 hover:underline">
-          ← Dashboard
-        </Link>
-      </p>
+  const deptName = (deptId: string | null) => {
+    if (!deptId) return "—";
+    const d = departments.find((x) => x.id === deptId);
+    return d ? `${d.code} — ${d.name}` : deptId;
+  };
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl font-semibold text-ink-900">{request.title}</h1>
-          <p className="mt-2 text-sm text-ink-700">
-            Priority: {request.priority} · Updated {new Date(request.updated_at).toLocaleString()}
-          </p>
-          {isRequester ? (
-            <p className="mt-2 text-sm text-brand-700">
-              Ticket received. Current status is shown below. Use comments to talk with reviewers
-              and the assignee.
-            </p>
-          ) : null}
-        </div>
-        <StatusBadge status={request.status} />
-      </div>
-
-      {liveMode === "sse+poll" ? (
-        <p className="mt-4 border border-brand-500/20 bg-brand-50 px-3 py-2 text-sm text-brand-700">
-          Live updates on ({analysisPending ? "waiting for AI analysis" : "status changes"}) —
-          SSE with polling fallback.
-        </p>
-      ) : null}
-
-      <section className="mt-6 border border-ink-900/10 bg-white/80 p-5">
-        <h2 className="font-display text-lg font-semibold">Description</h2>
-        <p className="mt-2 whitespace-pre-wrap text-ink-900">{request.description}</p>
-      </section>
-
-      {isStaff ? (
-        <section className="mt-6 border border-ink-900/10 bg-white/80 p-5">
-          <h2 className="font-display text-lg font-semibold">AI analysis</h2>
-          {analysis ? (
-            <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-ink-700">Recommended department</dt>
-                <dd className="font-medium">
-                  {analysis.recommended_department_code || "— (uncertain)"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-ink-700">Confidence</dt>
-                <dd className="font-medium">
-                  {analysis.confidence != null ? `${(analysis.confidence * 100).toFixed(0)}%` : "—"}
-                </dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-xs uppercase tracking-wide text-ink-700">Rationale</dt>
-                <dd className="mt-1 text-ink-900">{analysis.rationale}</dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="mt-2 text-sm text-ink-700">No analysis yet.</p>
-          )}
-        </section>
-      ) : null}
-
-      <section className="mt-6 border border-ink-900/10 bg-white/80 p-5">
-        <h2 className="font-display text-lg font-semibold">Comments</h2>
-        <ul className="mt-3 space-y-3">
-          {comments.length === 0 ? (
-            <li className="text-sm text-ink-700">No comments yet.</li>
-          ) : (
-            comments.map((c) => (
-              <li key={c.id} className="border-l-2 border-brand-500/40 pl-3 text-sm">
-                <p className="font-medium">{c.author_name || c.author_id}</p>
-                <p className="whitespace-pre-wrap text-ink-900">{c.body}</p>
-                <p className="text-xs text-ink-700">{new Date(c.created_at).toLocaleString()}</p>
-              </li>
-            ))
-          )}
-        </ul>
-        <form onSubmit={(e) => void onComment(e)} className="mt-4">
+  const commentsBlock = (
+    <section className="border border-ink-900/10 bg-white/80 p-5">
+      <h2 className="font-display text-lg font-semibold">Comments</h2>
+      <ul className="mt-3 max-h-80 space-y-3 overflow-y-auto">
+        {comments.length === 0 ? (
+          <li className="text-sm text-ink-700">No comments yet. Start the thread below.</li>
+        ) : (
+          comments.map((c) => (
+            <li key={c.id} className="border-l-2 border-brand-500/40 pl-3 text-sm">
+              <p className="font-medium">{c.author_name || c.author_id}</p>
+              <p className="whitespace-pre-wrap text-ink-900">{c.body}</p>
+              <p className="text-xs text-ink-700">{new Date(c.created_at).toLocaleString()}</p>
+            </li>
+          ))
+        )}
+      </ul>
+      <form onSubmit={(e) => void onComment(e)} className="mt-4 border-t border-ink-900/10 pt-4">
+        <label className="block text-sm">
+          <span className="text-ink-700">Add a comment</span>
           <textarea
-            className="w-full border border-ink-900/15 px-3 py-2 text-sm"
+            className="mt-1 w-full border border-ink-900/15 px-3 py-2 text-sm"
             rows={3}
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Write a comment…"
+            placeholder="Write a comment for the requester and handlers…"
           />
-          <button
-            type="submit"
-            disabled={busy || !commentText.trim()}
-            className="mt-2 bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            Post comment
-          </button>
-        </form>
+        </label>
+        <button
+          type="submit"
+          disabled={busy || !commentText.trim()}
+          className="mt-2 bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          Post comment
+        </button>
+      </form>
+    </section>
+  );
+
+  const actionsSidebar = showStaffActions ? (
+    <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+      <section className="border border-ink-900/10 bg-white/90 p-4">
+        <h2 className="font-display text-base font-semibold">Details</h2>
+        <dl className="mt-3 space-y-3 text-sm">
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink-700">Status</dt>
+            <dd className="mt-1">
+              <StatusBadge status={request.status} />
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink-700">Priority</dt>
+            <dd className="mt-0.5 font-medium capitalize">{request.priority}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink-700">Department</dt>
+            <dd className="mt-0.5 font-medium">{deptName(request.department_id)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink-700">AI recommended</dt>
+            <dd className="mt-0.5 font-medium">
+              {analysis?.recommended_department_code || "—"}
+              {analysis?.confidence != null
+                ? ` · ${(analysis.confidence * 100).toFixed(0)}%`
+                : ""}
+            </dd>
+          </div>
+          {openReview ? (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-ink-700">Review reason</dt>
+              <dd className="mt-0.5 text-ink-900">{openReview.reason}</dd>
+            </div>
+          ) : null}
+        </dl>
       </section>
 
-      {canAssign &&
-      request.department_id &&
-      ["pending_assignment", "assigned", "in_progress"].includes(request.status) ? (
-        <section className="mt-6 border border-ink-900/10 bg-white/80 p-5">
-          <h2 className="font-display text-lg font-semibold">Assign / reassign person</h2>
-          <p className="mt-1 text-sm text-ink-700">
-            Managers and reviewers can assign an individual in the request department.
+      {showReviewActions ? (
+        <section className="border border-brand-600/30 bg-white/90 p-4">
+          <h2 className="font-display text-base font-semibold">Actions</h2>
+          <p className="mt-1 text-xs text-ink-700">
+            Route this pending review ticket to a department without leaving the page.
           </p>
-          <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={(e) => void onAssign(e)}>
-            <label className="text-sm">
-              <span className="text-ink-700">Assignee</span>
+          <form className="mt-3 space-y-3" onSubmit={(e) => void onRouteDepartment(e)}>
+            <label className="block text-sm">
+              <span className="text-ink-700">Department</span>
               <select
-                className="mt-1 block min-w-[16rem] border border-ink-900/15 px-2 py-1.5"
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
+                className="mt-1 w-full border border-ink-900/15 px-2 py-1.5"
+                value={selectedDeptId}
+                onChange={(e) => setSelectedDeptId(e.target.value)}
+                required
               >
-                {assignable.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.full_name} ({u.email})
+                <option value="">Select department</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.code} — {d.name}
                   </option>
                 ))}
               </select>
             </label>
             <button
               type="submit"
-              disabled={busy || !assigneeId}
-              className="bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={busy || !selectedDeptId}
+              className="w-full bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
-              Save assignment
+              Assign department
+            </button>
+          </form>
+          <form className="mt-4 space-y-2 border-t border-ink-900/10 pt-3" onSubmit={(e) => void onRequestInfo(e)}>
+            <label className="block text-sm">
+              <span className="text-ink-700">Ask requester for information</span>
+              <textarea
+                className="mt-1 w-full border border-ink-900/15 px-2 py-1.5 text-sm"
+                rows={2}
+                value={infoMessage}
+                onChange={(e) => setInfoMessage(e.target.value)}
+                placeholder="What do you need clarified?"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={busy || infoMessage.trim().length < 3}
+              className="w-full border border-ink-900/20 px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              Request information
             </button>
           </form>
         </section>
       ) : null}
 
-      {isStaff && history.length > 0 ? (
-        <section className="mt-6 border border-ink-900/10 bg-white/80 p-5">
-          <h2 className="font-display text-lg font-semibold">Internal history</h2>
-          <ol className="mt-3 space-y-3">
-            {history.map((h) => (
-              <li key={h.id} className="border-l-2 border-ink-900/20 pl-3 text-sm">
-                <p className="font-medium">{h.action}</p>
-                <p className="text-ink-700">
-                  {h.from_status || "—"} → {h.to_status || "—"} ·{" "}
-                  {new Date(h.created_at).toLocaleString()}
-                </p>
-                {h.details ? <p className="text-ink-700">{h.details}</p> : null}
-              </li>
-            ))}
-          </ol>
+      {showPersonAssign ? (
+        <section className="border border-brand-600/30 bg-white/90 p-4">
+          <h2 className="font-display text-base font-semibold">Assign person</h2>
+          <p className="mt-1 text-xs text-ink-700">
+            Assign or reassign an individual in the ticket department.
+          </p>
+          <form className="mt-3 space-y-3" onSubmit={(e) => void onAssignPerson(e)}>
+            <label className="block text-sm">
+              <span className="text-ink-700">Assignee</span>
+              <select
+                className="mt-1 w-full border border-ink-900/15 px-2 py-1.5"
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+              >
+                {assignable.length === 0 ? (
+                  <option value="">No assignable users</option>
+                ) : (
+                  assignable.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} ({u.email})
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <button
+              type="submit"
+              disabled={busy || !assigneeId}
+              className="w-full bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {request.status === "pending_assignment" ? "Assign" : "Reassign"}
+            </button>
+          </form>
         </section>
       ) : null}
 
-      <section className="mt-6 flex flex-wrap gap-3">
-        {request.status === "draft" ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void submitDraft()}
-            className="bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
-          >
-            Submit
-          </button>
-        ) : null}
-        {request.status === "draft" || request.status === "submitted" ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void cancelRequest()}
-            className="border border-ink-900/20 px-4 py-2 text-sm hover:bg-ink-900/5 disabled:opacity-60"
-          >
-            Cancel request
-          </button>
-        ) : null}
-      </section>
-
-      {request.status === "submitted" && isRequester ? (
-        <form onSubmit={(e) => void onClarify(e)} className="mt-6 border border-ink-900/10 bg-white/80 p-5">
-          <h2 className="font-display text-lg font-semibold">Clarify description</h2>
-          <textarea
-            className="mt-2 w-full border border-ink-900/15 px-3 py-2"
-            rows={4}
-            value={clarify}
-            onChange={(e) => setClarify(e.target.value)}
-            placeholder="Add clarification details…"
-          />
-          <button
-            type="submit"
-            disabled={busy || !clarify.trim()}
-            className="mt-3 bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            Save clarification
-          </button>
-        </form>
+      {request.status === "draft" || request.status === "submitted" ? (
+        <section className="border border-ink-900/10 bg-white/90 p-4">
+          <h2 className="font-display text-base font-semibold">Lifecycle</h2>
+          <div className="mt-3 flex flex-col gap-2">
+            {request.status === "draft" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void submitDraft()}
+                className="bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                Submit
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void cancelRequest()}
+              className="border border-ink-900/20 px-3 py-2 text-sm disabled:opacity-60"
+            >
+              Cancel request
+            </button>
+          </div>
+        </section>
       ) : null}
+    </aside>
+  ) : null;
 
-      {error ? <p className="mt-4 text-sm text-red-700">{error}</p> : null}
+  return (
+    <div>
+      <p className="mb-4 text-sm">
+        <Link
+          to={canReviewRoute ? "/app/review" : "/app"}
+          className="text-brand-700 hover:underline"
+        >
+          ← {canReviewRoute ? "Review queue" : "My tickets"}
+        </Link>
+      </p>
+
+      <div className={showStaffActions ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]" : ""}>
+        <div className="min-w-0 space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="font-display text-3xl font-semibold text-ink-900">{request.title}</h1>
+              <p className="mt-2 text-sm text-ink-700">
+                Updated {new Date(request.updated_at).toLocaleString()}
+                {!showStaffActions ? ` · Priority: ${request.priority}` : ""}
+              </p>
+              {isRequester && !isStaff ? (
+                <p className="mt-2 text-sm text-brand-700">
+                  Ticket received. Status is shown below — use comments to talk with reviewers and
+                  the assignee.
+                </p>
+              ) : null}
+            </div>
+            {!showStaffActions ? <StatusBadge status={request.status} /> : null}
+          </div>
+
+          {liveMode === "sse+poll" ? (
+            <p className="border border-brand-500/20 bg-brand-50 px-3 py-2 text-sm text-brand-700">
+              Live updates on ({analysisPending ? "waiting for AI analysis" : "status changes"}) —
+              SSE with polling fallback.
+            </p>
+          ) : null}
+
+          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+
+          <section className="border border-ink-900/10 bg-white/80 p-5">
+            <h2 className="font-display text-lg font-semibold">Description</h2>
+            <p className="mt-2 whitespace-pre-wrap text-ink-900">{request.description}</p>
+          </section>
+
+          {isStaff ? (
+            <section className="border border-ink-900/10 bg-white/80 p-5">
+              <h2 className="font-display text-lg font-semibold">AI analysis</h2>
+              {analysis ? (
+                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-ink-700">
+                      Recommended department
+                    </dt>
+                    <dd className="font-medium">
+                      {analysis.recommended_department_code || "— (uncertain)"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-ink-700">Confidence</dt>
+                    <dd className="font-medium">
+                      {analysis.confidence != null
+                        ? `${(analysis.confidence * 100).toFixed(0)}%`
+                        : "—"}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs uppercase tracking-wide text-ink-700">Rationale</dt>
+                    <dd className="mt-1 text-ink-900">{analysis.rationale}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="mt-2 text-sm text-ink-700">No analysis yet.</p>
+              )}
+            </section>
+          ) : null}
+
+          {commentsBlock}
+
+          {isStaff && history.length > 0 ? (
+            <section className="border border-ink-900/10 bg-white/80 p-5">
+              <h2 className="font-display text-lg font-semibold">Internal history</h2>
+              <ol className="mt-3 space-y-3">
+                {history.map((h) => (
+                  <li key={h.id} className="border-l-2 border-ink-900/20 pl-3 text-sm">
+                    <p className="font-medium">{h.action}</p>
+                    <p className="text-ink-700">
+                      {h.from_status || "—"} → {h.to_status || "—"} ·{" "}
+                      {new Date(h.created_at).toLocaleString()}
+                    </p>
+                    {h.details ? <p className="text-ink-700">{h.details}</p> : null}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
+
+          {!showStaffActions ? (
+            <section className="flex flex-wrap gap-3">
+              {request.status === "draft" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void submitDraft()}
+                  className="bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+                >
+                  Submit
+                </button>
+              ) : null}
+              {request.status === "draft" || request.status === "submitted" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void cancelRequest()}
+                  className="border border-ink-900/20 px-4 py-2 text-sm hover:bg-ink-900/5 disabled:opacity-60"
+                >
+                  Cancel request
+                </button>
+              ) : null}
+            </section>
+          ) : null}
+
+          {request.status === "submitted" && isRequester ? (
+            <form
+              onSubmit={(e) => void onClarify(e)}
+              className="border border-ink-900/10 bg-white/80 p-5"
+            >
+              <h2 className="font-display text-lg font-semibold">Clarify description</h2>
+              <textarea
+                className="mt-2 w-full border border-ink-900/15 px-3 py-2"
+                rows={4}
+                value={clarify}
+                onChange={(e) => setClarify(e.target.value)}
+                placeholder="Add clarification details…"
+              />
+              <button
+                type="submit"
+                disabled={busy || !clarify.trim()}
+                className="mt-3 bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                Save clarification
+              </button>
+            </form>
+          ) : null}
+        </div>
+
+        {actionsSidebar}
+      </div>
     </div>
   );
 }

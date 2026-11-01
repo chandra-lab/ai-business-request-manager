@@ -42,8 +42,20 @@ export const routingApi = {
   reviewQueue() {
     return api<ReviewQueueItem[]>("/api/v1/review-queue");
   },
+  openReviewForRequest(requestId: string) {
+    return api<ReviewQueueItem>(`/api/v1/review-queue/by-request/${requestId}`);
+  },
   assignDepartment(reviewId: string, body: { department_id: string; decision_reason: string }) {
     return api<RequestSummary>(`/api/v1/review-queue/${reviewId}/assign-department`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  assignDepartmentForRequest(
+    requestId: string,
+    body: { department_id: string; decision_reason: string; final_priority?: string },
+  ) {
+    return api<RequestSummary>(`/api/v1/review-queue/by-request/${requestId}/assign-department`, {
       method: "POST",
       body: JSON.stringify(body),
     });
@@ -54,6 +66,15 @@ export const routingApi = {
       body: JSON.stringify({ message }),
     });
   },
+  requestInformationForRequest(requestId: string, message: string) {
+    return api<RequestSummary>(
+      `/api/v1/review-queue/by-request/${requestId}/request-information`,
+      {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      },
+    );
+  },
   managerQueue() {
     return api<RequestSummary[]>("/api/v1/manager/queue");
   },
@@ -62,5 +83,10 @@ export const routingApi = {
       method: "POST",
       body: JSON.stringify({ assignee_id: assigneeId, notes }),
     });
+  },
+  departments() {
+    return api<{ id: string; code: string; name: string; is_active: boolean }[]>(
+      "/api/v1/departments",
+    );
   },
 };

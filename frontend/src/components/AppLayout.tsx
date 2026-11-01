@@ -8,7 +8,7 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-app-wash">
       <header className="border-b border-ink-900/10 bg-white/70 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <div className="flex flex-wrap items-center gap-6">
             <Link
               to={user ? homePathForUser(user) : "/app"}
@@ -18,7 +18,7 @@ export function AppLayout() {
             </Link>
             <nav className="flex flex-wrap gap-4 text-sm text-ink-700">
               <Link className="hover:text-brand-700" to="/app">
-                My requests
+                My tickets
               </Link>
               <Link className="hover:text-brand-700" to="/app/requests/new">
                 New request
@@ -26,16 +26,16 @@ export function AppLayout() {
               {hasRole("department_manager", "admin") ? (
                 <>
                   <Link className="hover:text-brand-700" to="/app/department">
-                    Department
+                    Team queue
                   </Link>
                   <Link className="hover:text-brand-700" to="/app/manager">
-                    Assign
+                    Assignments
                   </Link>
                 </>
               ) : null}
               {hasRole("reviewer", "admin") ? (
                 <Link className="hover:text-brand-700" to="/app/review">
-                  Review
+                  Review queue
                 </Link>
               ) : null}
               {hasRole("hr") ? (
@@ -65,7 +65,7 @@ export function AppLayout() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-8">
         <Outlet />
       </main>
     </div>

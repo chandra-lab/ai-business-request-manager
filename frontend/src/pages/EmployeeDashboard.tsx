@@ -38,7 +38,7 @@ export function EmployeeDashboard() {
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-brand-700">Employee</p>
-          <h1 className="font-display text-3xl font-semibold text-ink-900">My requests</h1>
+          <h1 className="font-display text-3xl font-semibold text-ink-900">My tickets</h1>
           <p className="mt-1 text-ink-700">Track submissions, AI routing, and status updates.</p>
         </div>
         <Link
