@@ -33,7 +33,7 @@ def _make_pending_review(db, client, auth_headers):
         json={
             "title": "Need help",
             "description": "Something is wrong and someone should look into it when possible.",
-            "priority": "medium",
+
             "submit": True,
         },
     )

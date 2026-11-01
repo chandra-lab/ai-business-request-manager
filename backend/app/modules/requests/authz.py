@@ -151,6 +151,27 @@ def can_assign_individual(db: Session, user: User, request: Request) -> bool:
     return False
 
 
+def can_set_priority(db: Session, user: User, request: Request) -> bool:
+    """Reviewer, admin, or department manager (of the ticket's dept) may set priority.
+
+    Employees view priority read-only. Managers need a department match when the
+    ticket already has a department; reviewers/admins may set it earlier (e.g.
+    during pending_review).
+    """
+    if is_hr_case(request) and not can_access_hr_content(db, user, request):
+        return False
+    if is_admin(user) or is_reviewer(user):
+        return True
+    if (
+        is_manager(user)
+        and user.department_id
+        and request.department_id
+        and user.department_id == request.department_id
+    ):
+        return True
+    return False
+
+
 def require_view(
     db: Session,
     user: User,

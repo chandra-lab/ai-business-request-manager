@@ -11,9 +11,16 @@ from app.models.request import RequestPriority, RequestStatus
 
 
 class RequestCreate(BaseModel):
+    """Employees do not set priority — AI applies it after analysis.
+
+    Sending ``priority`` is rejected (extra fields forbidden) so clients cannot
+    smuggle a priority on create.
+    """
+
+    model_config = {"extra": "forbid"}
+
     title: str = Field(min_length=3, max_length=255)
     description: str = Field(min_length=10, max_length=20_000)
-    priority: RequestPriority = RequestPriority.MEDIUM
     submit: bool = True
     is_hr_sensitive: bool = False
 

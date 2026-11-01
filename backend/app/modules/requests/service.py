@@ -104,13 +104,14 @@ def create_request(
             return existing, False
 
     initial = RequestStatus.SUBMITTED if body.submit else RequestStatus.DRAFT
+    # Placeholder until AI analysis applies recommended_priority (employees cannot set it).
     request = Request(
         title=body.title.strip(),
         description=body.description.strip(),
-        priority=body.priority,
+        priority=RequestPriority.MEDIUM,
         status=initial,
         requester_id=user.id,
-        department_id=None,  # assigned by routing in Phase 4
+        department_id=None,
         is_hr_sensitive=body.is_hr_sensitive,
         idempotency_key=idempotency_key,
     )
@@ -184,11 +185,50 @@ def update_request(
 ) -> Request:
     authz.require_view(db, user, request)
 
+    # Staff priority override (reviewer / admin / dept manager) — employees cannot set it.
+    if body.priority is not None and body.priority != request.priority:
+        if not authz.can_set_priority(db, user, request):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only reviewers, admins, or department managers can set priority",
+            )
+        if request.status in {RequestStatus.CLOSED, RequestStatus.CANCELLED}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot change priority on a closed or cancelled request",
+            )
+        previous = request.priority
+        request.priority = body.priority
+        _add_history(
+            db,
+            request=request,
+            actor=user,
+            action="priority_changed",
+            from_status=request.status.value,
+            to_status=request.status.value,
+            details=f"from={previous.value} to={body.priority.value}",
+        )
+        from app.models.audit_log import AuditLog
+
+        db.add(
+            AuditLog(
+                actor_id=user.id,
+                action="priority.staff_override",
+                resource_type="request",
+                resource_id=str(request.id),
+                details=f"from={previous.value} to={body.priority.value}",
+                metadata_json={
+                    "previous_priority": previous.value,
+                    "new_priority": body.priority.value,
+                },
+            )
+        )
+
     # Field edits: requester only, and only while draft (or description clarify when submitted)
-    fields_changing = any(
-        v is not None for v in (body.title, body.description, body.priority, body.is_hr_sensitive)
+    requester_fields = any(
+        v is not None for v in (body.title, body.description, body.is_hr_sensitive)
     )
-    if fields_changing:
+    if requester_fields:
         if not authz.can_edit_as_requester(user, request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
         if request.status == RequestStatus.DRAFT:
@@ -196,13 +236,11 @@ def update_request(
                 request.title = body.title.strip()
             if body.description is not None:
                 request.description = body.description.strip()
-            if body.priority is not None:
-                request.priority = body.priority
             if body.is_hr_sensitive is not None:
                 request.is_hr_sensitive = body.is_hr_sensitive
         elif request.status == RequestStatus.SUBMITTED and body.description is not None:
             # Narrow clarification only
-            if body.title is not None or body.priority is not None or body.is_hr_sensitive is not None:
+            if body.title is not None or body.is_hr_sensitive is not None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Only description clarification is allowed after submit",

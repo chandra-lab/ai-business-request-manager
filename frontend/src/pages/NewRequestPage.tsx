@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { requestsApi } from "../api/requests";
-import type { RequestPriority } from "../types/requests";
 
 function newIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -14,7 +13,6 @@ export function NewRequestPage() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<RequestPriority>("medium");
   const [submitNow, setSubmitNow] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +27,6 @@ export function NewRequestPage() {
         {
           title: title.trim(),
           description: description.trim(),
-          priority,
           submit: submitNow,
         },
         newIdempotencyKey(),
@@ -48,7 +45,9 @@ export function NewRequestPage() {
   return (
     <div className="max-w-2xl">
       <h1 className="font-display text-3xl font-semibold text-ink-900">New request</h1>
-      <p className="mt-1 text-ink-700">Describe what you need. AI routing comes in Phase 3.</p>
+      <p className="mt-1 text-ink-700">
+        Describe what you need. AI will recommend routing and priority after you submit.
+      </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-5 border border-ink-900/10 bg-white/80 p-6">
         <label className="block">
@@ -72,20 +71,6 @@ export function NewRequestPage() {
             onChange={(e) => setDescription(e.target.value)}
             className="w-full border border-ink-900/15 px-3 py-2 outline-none ring-brand-500 focus:ring-2"
           />
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-ink-700">Priority</span>
-          <select
-            value={priority}
-            onChange={(e) => setPriority(e.target.value as RequestPriority)}
-            className="w-full border border-ink-900/15 px-3 py-2"
-          >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
-          </select>
         </label>
 
         <label className="block">

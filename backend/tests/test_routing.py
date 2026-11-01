@@ -156,7 +156,7 @@ def test_review_assign_department_api(client, auth_headers, db):
         json={
             "title": "Need help",
             "description": "Something is wrong and someone should look into it when possible.",
-            "priority": "medium",
+
             "submit": True,
         },
         headers=employee,

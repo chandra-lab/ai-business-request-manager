@@ -6,7 +6,9 @@ import { StatusBadge } from "../components/StatusBadge";
 import { useAuth } from "../hooks/useAuth";
 import { useRequestLiveUpdates } from "../hooks/useRequestLiveUpdates";
 import type { AIAnalysis } from "../types/analysis";
-import type { RequestDetail, RequestHistoryItem } from "../types/requests";
+import type { RequestDetail, RequestHistoryItem, RequestPriority } from "../types/requests";
+
+const PRIORITIES: RequestPriority[] = ["low", "medium", "high", "urgent"];
 
 interface Comment {
   id: string;
@@ -35,6 +37,7 @@ export function RequestDetailPage() {
   const isStaff = hasRole("admin", "department_manager", "reviewer", "hr");
   const canReviewRoute = hasRole("admin", "reviewer");
   const canAssignPerson = hasRole("admin", "department_manager", "reviewer");
+  const canSetPriority = hasRole("admin", "reviewer", "department_manager");
 
   const [request, setRequest] = useState<RequestDetail | null>(null);
   const [history, setHistory] = useState<RequestHistoryItem[]>([]);
@@ -52,6 +55,7 @@ export function RequestDetailPage() {
   const [selectedDeptId, setSelectedDeptId] = useState("");
   const [openReview, setOpenReview] = useState<ReviewQueueItem | null>(null);
   const [infoMessage, setInfoMessage] = useState("");
+  const [editPriority, setEditPriority] = useState<RequestPriority>("medium");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -62,6 +66,7 @@ export function RequestDetailPage() {
       requestsApi.comments(id),
     ]);
     setRequest(detail);
+    setEditPriority(detail.priority);
     setHistory(hist);
     setAnalysis(analysisResult);
     setAnalysisPending(analysisResult === null);
@@ -207,6 +212,21 @@ export function RequestDetailPage() {
     }
   }
 
+  async function onSavePriority(event: FormEvent) {
+    event.preventDefault();
+    if (!id || !editPriority) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await requestsApi.update(id, { priority: editPriority });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Priority update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onRouteDepartment(event: FormEvent) {
     event.preventDefault();
     if (!id || !selectedDeptId) {
@@ -329,6 +349,9 @@ export function RequestDetailPage() {
               {analysis?.confidence != null
                 ? ` · ${(analysis.confidence * 100).toFixed(0)}%`
                 : ""}
+              {analysis?.recommended_priority
+                ? ` · priority ${analysis.recommended_priority}`
+                : ""}
             </dd>
           </div>
           {openReview ? (
@@ -339,6 +362,38 @@ export function RequestDetailPage() {
           ) : null}
         </dl>
       </section>
+
+      {canSetPriority && !["closed", "cancelled"].includes(request.status) ? (
+        <section className="border border-brand-600/30 bg-white/90 p-4">
+          <h2 className="font-display text-base font-semibold">Priority</h2>
+          <p className="mt-1 text-xs text-ink-700">
+            AI sets the initial priority. Reviewers, admins, and managers can override it.
+          </p>
+          <form className="mt-3 space-y-3" onSubmit={(e) => void onSavePriority(e)}>
+            <label className="block text-sm">
+              <span className="text-ink-700">System priority</span>
+              <select
+                className="mt-1 w-full border border-ink-900/15 px-2 py-1.5 capitalize"
+                value={editPriority}
+                onChange={(e) => setEditPriority(e.target.value as RequestPriority)}
+              >
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              disabled={busy || editPriority === request.priority}
+              className="w-full bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Update priority
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       {showReviewActions ? (
         <section className="border border-brand-600/30 bg-white/90 p-4">

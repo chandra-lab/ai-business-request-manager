@@ -50,7 +50,6 @@ export const requestsApi = {
     body: {
       title: string;
       description: string;
-      priority: RequestPriority;
       submit: boolean;
       is_hr_sensitive?: boolean;
     },

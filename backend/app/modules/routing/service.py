@@ -63,30 +63,59 @@ def _add_history(
     )
 
 
-def _audit_priority(
+def _apply_ai_priority(
     db: Session,
     *,
     request: Request,
     ai_priority: str | None,
 ) -> None:
-    """Keep AI-recommended priority auditable and separate from system priority."""
+    """Apply validated AI recommended priority as the system priority.
+
+    Invalid / unknown values are ignored (request keeps its placeholder medium).
+    """
     if not ai_priority:
         return
-    system = request.priority.value
-    if ai_priority.lower() != system:
+    try:
+        new_priority = RequestPriority(ai_priority.strip().lower())
+    except ValueError:
         db.add(
             AuditLog(
                 actor_id=None,
-                action="priority.ai_vs_system",
+                action="priority.ai_invalid",
                 resource_type="request",
                 resource_id=str(request.id),
-                details=f"ai_recommended_priority={ai_priority}; system_priority={system}",
-                metadata_json={
-                    "ai_recommended_priority": ai_priority,
-                    "system_priority": system,
-                },
+                details=f"ignored invalid ai_recommended_priority={ai_priority}",
+                metadata_json={"ai_recommended_priority": ai_priority},
             )
         )
+        return
+
+    previous = request.priority
+    if previous == new_priority:
+        return
+
+    request.priority = new_priority
+    _add_history(
+        db,
+        request,
+        action="priority_set_by_ai",
+        from_status=request.status.value,
+        to_status=request.status.value,
+        details=f"from={previous.value} to={new_priority.value}",
+    )
+    db.add(
+        AuditLog(
+            actor_id=None,
+            action="priority.ai_applied",
+            resource_type="request",
+            resource_id=str(request.id),
+            details=f"from={previous.value} to={new_priority.value}",
+            metadata_json={
+                "previous_priority": previous.value,
+                "ai_recommended_priority": new_priority.value,
+            },
+        )
+    )
 
 
 def _ensure_department_assignment(
@@ -170,7 +199,8 @@ def apply_routing_after_analysis(
         # Already past routing handoff
         return RoutingDecision.AUTO_ASSIGN
 
-    _audit_priority(db, request=request, ai_priority=analysis.recommended_priority)
+    if analysis.status != AIAnalysisStatus.FAILED:
+        _apply_ai_priority(db, request=request, ai_priority=analysis.recommended_priority)
 
     if analysis.status == AIAnalysisStatus.FAILED:
         decision = RoutingDecision.FAILURE_REVIEW

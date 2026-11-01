@@ -5,6 +5,7 @@ export interface AIAnalysis {
   confidence: number | null;
   recommended_department_id: string | null;
   recommended_department_code: string | null;
+  recommended_priority: string | null;
   rationale: string | null;
   model_id: string | null;
   prompt_version: string | null;

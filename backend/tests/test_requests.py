@@ -12,7 +12,7 @@ def test_create_list_detail_history(client, auth_headers):
         json={
             "title": "Badge access issue",
             "description": "Cannot enter building B after hours with my badge.",
-            "priority": "high",
+
             "submit": True,
         },
         headers={**headers, "Idempotency-Key": "test-key-create-1"},
@@ -52,7 +52,7 @@ def test_idempotent_create(client, auth_headers):
     body = {
         "title": "Printer jam help",
         "description": "Floor 3 printer keeps jamming on duplex jobs.",
-        "priority": "low",
+
         "submit": True,
     }
     key_headers = {**headers, "Idempotency-Key": "same-key-abc"}
@@ -72,7 +72,7 @@ def test_authz_hides_other_employees_requests(client, auth_headers):
         json={
             "title": "Private employee ticket",
             "description": "Should not be visible to another employee.",
-            "priority": "medium",
+
             "submit": True,
         },
         headers=employee,
@@ -96,7 +96,7 @@ def test_admin_can_view_any(client, auth_headers):
         json={
             "title": "Admin visibility check",
             "description": "Admin should be able to open this request.",
-            "priority": "medium",
+
             "submit": True,
         },
         headers=employee,
@@ -113,7 +113,7 @@ def test_patch_submit_and_cancel(client, auth_headers):
         json={
             "title": "Draft then submit",
             "description": "Start as draft then move to submitted.",
-            "priority": "medium",
+
             "submit": False,
         },
         headers=headers,
@@ -153,7 +153,7 @@ def test_attachment_upload(client, auth_headers):
         json={
             "title": "Attachment upload test",
             "description": "Need to attach a short text note for support.",
-            "priority": "medium",
+
             "submit": True,
         },
         headers=headers,
@@ -179,7 +179,7 @@ def test_employee_dashboard(client, auth_headers):
         json={
             "title": "Dashboard visible request",
             "description": "This should appear on the employee dashboard recent list.",
-            "priority": "medium",
+
             "submit": True,
         },
         headers=headers,
@@ -199,7 +199,7 @@ def test_reject_disallowed_content_type(client, auth_headers):
         json={
             "title": "Bad attachment type",
             "description": "Upload should reject executable content types.",
-            "priority": "medium",
+
             "submit": True,
         },
         headers=headers,
