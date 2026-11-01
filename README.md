@@ -117,7 +117,7 @@ Covers health, auth, request create/list/detail/history, idempotency, authz, att
 - `JWT_SECRET` — min 32 chars
 - `DATABASE_URL` / Postgres credentials
 - `CELERY_BROKER_URL` / RabbitMQ credentials
-- `AI_PROVIDER=mock` — no Anthropic key required
+- `AI_PROVIDER=mock` — default. Live: `groq` (`GROQ_API_KEY`, `GROQ_MODEL=openai/gpt-oss-20b`) or `anthropic` (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`)
 - `SEED_DEMO_PASSWORD` — demo user password for the seed script
 - `UPLOAD_DIR` — local attachment storage (default `uploads`)
 - `UPLOAD_MAX_BYTES` — default 10 MiB
@@ -156,9 +156,31 @@ Phase 3 worker: on `request.submitted` outbox → `submitted` → `ai_processing
 
 ## AI providers (Phase 3)
 
-**Default is Mock** — no Anthropic key required for local demo or CI.
+**Default is Mock** — no live API key required for local demo or CI.
 
-To switch to Claude Haiku later (when you have a key):
+### Groq (recommended live provider)
+
+Uses Groq’s OpenAI-compatible Chat Completions API
+(`https://api.groq.com/openai/v1/chat/completions`) with JSON object mode.
+
+Default model: **`openai/gpt-oss-20b`** from Groq’s
+[production models](https://console.groq.com/docs/models) (small / inexpensive;
+verified against the Models API). Other production chat IDs such as
+[`llama-3.1-8b-instant`](https://console.groq.com/docs/model/llama-3.1-8b-instant)
+work when your Groq project has access — set `GROQ_MODEL` accordingly.
+
+```bash
+AI_PROVIDER=groq
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=openai/gpt-oss-20b
+```
+
+**Codespaces / Compose:** set `AI_PROVIDER`, `GROQ_API_KEY`, and optional
+`GROQ_MODEL` in Codespaces Secrets or gitignored `.env` (Compose already loads
+`.env` via `env_file`). Never commit a real key. **Rotate any key pasted into
+chat.**
+
+### Anthropic (optional)
 
 ```bash
 AI_PROVIDER=anthropic
@@ -168,7 +190,10 @@ ANTHROPIC_MODEL=claude-haiku-5-5
 
 | Setting | Purpose |
 |---------|---------|
-| `AI_PROVIDER` | `mock` (**default**) or `anthropic` |
+| `AI_PROVIDER` | `mock` (**default**), `groq`, or `anthropic` |
+| `GROQ_API_KEY` | Required only when `AI_PROVIDER=groq` |
+| `GROQ_MODEL` | Default **`openai/gpt-oss-20b`** ([Groq models](https://console.groq.com/docs/models)); e.g. `llama-3.1-8b-instant` if available on your account |
+| `GROQ_MAX_TOKENS` | Default `512` |
 | `ANTHROPIC_API_KEY` | Required only when `AI_PROVIDER=anthropic` |
 | `ANTHROPIC_MODEL` | Claude model id (default **`claude-haiku-5-5`**). Alias: `ANTHROPIC_MODEL_ID` |
 | `ANTHROPIC_MAX_TOKENS` | Default `512` |
@@ -176,6 +201,8 @@ ANTHROPIC_MODEL=claude-haiku-5-5
 | `ROUTING_AUTO_ASSIGN_MIN` | Default `0.85` auto department |
 | `ROUTING_REVIEW_MIN` | Default `0.60` (below → clarification review) |
 | `OUTBOX_MAX_ATTEMPTS` | Default `5`; then dead-letter to manual review |
+
+If `AI_PROVIDER` is `groq`/`anthropic` but the matching key is empty, the factory falls back to **Mock** so the app still boots.
 
 ### Routing APIs (Phase 4)
 

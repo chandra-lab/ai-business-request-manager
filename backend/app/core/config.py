@@ -53,6 +53,16 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ANTHROPIC_MODEL", "ANTHROPIC_MODEL_ID", "anthropic_model_id"),
     )
     anthropic_max_tokens: int = 512
+    # Groq OpenAI-compatible API — https://console.groq.com/docs/models
+    groq_api_key: str = ""
+    groq_model: str = Field(
+        default="openai/gpt-oss-20b",
+        validation_alias=AliasChoices("GROQ_MODEL", "groq_model"),
+    )
+    groq_max_tokens: int = Field(
+        default=512,
+        validation_alias=AliasChoices("GROQ_MAX_TOKENS", "groq_max_tokens"),
+    )
     # Simulate provider outage (forces AI failure → manual review) for scenario testing
     ai_force_failure: bool = False
 
