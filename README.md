@@ -1,8 +1,17 @@
 # AIBRM — AI Business Request Manager
 
-Internal request routing for an automotive group. **Phase 6** adds role dashboards and live request status updates.
+Internal request routing for an automotive group. **Phase 7** adds mandatory scenario automation and product docs.
 
 Works **without an Anthropic API key** — `AI_PROVIDER=mock` is the default.
+
+### Docs
+
+| Doc | Path |
+|-----|------|
+| Architecture | [`docs/architecture.md`](docs/architecture.md) |
+| AI prompts | [`docs/ai-prompts.md`](docs/ai-prompts.md) |
+| Scenarios 1–6 | [`docs/scenarios.md`](docs/scenarios.md) |
+| Limitations | [`docs/limitations.md`](docs/limitations.md) |
 
 ## Quick start (Docker Compose)
 
@@ -196,8 +205,16 @@ Demo HR account: `hr@aibrm.example.com` / `DemoPass123!`
 - **Phase 3**: AI Mock/Anthropic + outbox
 - **Phase 4**: confidence routing, review queue, manager assign, retries
 - **Phase 5**: department/HR security, case grants, audit, injection tests
-- **Phase 6 (current)**: employee / department / manager / review / HR dashboards; SSE+poll live status
-- Phase 7: scenario validation + architecture docs
+- **Phase 6**: employee / department / manager / review / HR dashboards; SSE+poll live status
+- **Phase 7 (current)**: six mandatory scenarios automated; architecture / prompt / scenario / limitations docs
+
+### Run tests
+
+```bash
+cd backend && source .venv/bin/activate
+export APP_ENV=test UPLOAD_DIR=/tmp/aibrm-test-uploads
+pytest -q
+```
 
 ### Phase 6 UI routes
 
