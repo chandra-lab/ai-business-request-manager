@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+*.log
+npm-debug.log*
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Docker / local data
+postgres_data/
+rabbitmq_data/
+uploads/
+*.sqlite3
+
+# Alembic (keep versions)
+backend/alembic/versions/__pycache__/
+
+# Secrets (never commit real secrets)
+.env.local
+.env.production
+*.pem
+*.key

@@ -1,0 +1,1 @@
+"""Background worker stubs (Celery)."""
