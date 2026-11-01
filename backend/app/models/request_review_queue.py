@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,6 +15,7 @@ from app.core.database import Base
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.department import Department
     from app.models.request import Request
     from app.models.user import User
 
@@ -37,6 +38,14 @@ class RequestReviewQueue(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     reason: Mapped[str] = mapped_column(String(255), nullable=False)
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clarification_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    decision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assigned_department_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     status: Mapped[ReviewQueueStatus] = mapped_column(
         Enum(
             ReviewQueueStatus,
@@ -56,3 +65,4 @@ class RequestReviewQueue(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     request: Mapped[Request] = relationship("Request")
     resolved_by: Mapped[User | None] = relationship("User")
+    assigned_department: Mapped[Department | None] = relationship("Department")

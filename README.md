@@ -1,6 +1,6 @@
 # AIBRM — AI Business Request Manager
 
-Internal request routing for an automotive group. Phases 1–2 delivered foundation + request management. **Phase 3** adds Mock/Anthropic AI analysis via Celery outbox workers.
+Internal request routing for an automotive group. **Phase 4** adds confidence-based routing, review queue, manager assignment, and outbox retries.
 
 Works **without an Anthropic API key** — `AI_PROVIDER=mock` is the default.
 
@@ -34,15 +34,22 @@ Seeded by `backend/scripts/seed.py` using `SEED_DEMO_PASSWORD` from `.env` (defa
 | hr@aibrm.example.com        | employee, hr                 |
 | admin@aibrm.example.com     | employee, admin              |
 
-## Mock AI demo (Phase 3)
+## Phase 4 demo — auto IT + ambiguous review
 
-1. Ensure Compose is up (`docker compose up --build`) with `AI_PROVIDER=mock` (default).
-2. Sign in at http://localhost:5173 as `employee@aibrm.example.com`.
-3. **New request** with an IT-like title, e.g. `VPN access broken after password reset`.
-4. Open the request — status moves `submitted` → `ai_processing`; detail page polls until **AI analysis** appears (department, confidence, rationale).
-5. `GET /api/v1/requests/{id}/analysis` returns the stored `AIAnalysis` (no Anthropic key needed).
+Thresholds (env): `ROUTING_AUTO_ASSIGN_MIN=0.85`, `ROUTING_REVIEW_MIN=0.60`.
 
-Handoff for Phase 4: after analysis completes, the request **stays** in `ai_processing` with `AIAnalysis.status=completed`. Confidence-based routing to `pending_review` / assignment is Phase 4.
+**Auto-route (high confidence IT)**  
+1. Login as `employee@aibrm.example.com`.  
+2. Submit: title `VPN access broken after password reset`.  
+3. Status becomes `pending_assignment` with department IT (no individual yet).  
+4. Login as `manager@aibrm.example.com` → **Manager queue** → assign an employee.
+
+**Ambiguous → review**  
+1. Submit: title `Need help` / vague description.  
+2. Status `pending_review`, clarification required.  
+3. Login as `reviewer@aibrm.example.com` or `admin@…` → **Review queue** → assign department or request information.
+
+Simulate AI outage → manual review: set `AI_FORCE_FAILURE=true` (or exhaust outbox retries).
 
 API equivalent:
 
@@ -143,14 +150,31 @@ Phase 3 worker: on `request.submitted` outbox → `submitted` → `ai_processing
 | `ANTHROPIC_API_KEY` | Required only when `AI_PROVIDER=anthropic` |
 | `ANTHROPIC_MODEL_ID` | Default **`claude-haiku-5-5`** ([Anthropic Haiku 5.5 docs](https://platform.claude.com/docs/en/models/haiku-5-5/overview)) |
 | `ANTHROPIC_MAX_TOKENS` | Default `512` |
+| `AI_FORCE_FAILURE` | Simulate provider outage → analysis failure → review |
+| `ROUTING_AUTO_ASSIGN_MIN` | Default `0.85` auto department |
+| `ROUTING_REVIEW_MIN` | Default `0.60` (below → clarification review) |
+| `OUTBOX_MAX_ATTEMPTS` | Default `5`; then dead-letter to manual review |
 
-- **Mock**: keyword fixtures for six scenarios (IT, HR, Finance, Fleet, Legal, ambiguous). No network calls.
-- **Anthropic**: official `anthropic` SDK; structured JSON validated by Pydantic; falls back to Mock if provider is `anthropic` but no key is set.
-- Code lives under `backend/app/ai/` (interface, schemas, prompt `v1.0.0`, Mock, Anthropic, factory, service).
+### Routing APIs (Phase 4)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/v1/review-queue` | Open/in-review items |
+| GET | `/api/v1/review-queue/{id}` | Detail |
+| POST | `/api/v1/review-queue/{id}/assign-department` | Reviewer assigns department |
+| POST | `/api/v1/review-queue/{id}/request-information` | Ask requester for clarification |
+| GET | `/api/v1/manager/queue` | `pending_assignment` for manager’s dept |
+| POST | `/api/v1/requests/{id}/assign` | Assign individual (idempotent) |
+| POST | `/api/v1/requests/{id}/reassign` | Reassign individual |
+| GET | `/api/v1/departments` | Active departments |
+| GET | `/api/v1/notifications` | In-app notifications |
+
+AI-recommended priority is stored on `AIAnalysis.recommended_priority` and audited separately from system `request.priority`.
 
 ## Phase status
 
-- **Phase 1**: foundation — Compose, auth, models, seed, login UI
-- **Phase 2**: request CRUD/lifecycle, attachments, employee dashboard API + UI
-- **Phase 3 (current)**: AI interface, Mock/Anthropic, Celery outbox consumer, analysis UI
-- Phases 4–7: routing, security hardening, role dashboards, scenario validation
+- **Phase 1**: foundation
+- **Phase 2**: request management
+- **Phase 3**: AI Mock/Anthropic + outbox
+- **Phase 4 (current)**: confidence routing, review queue, manager assign, retries
+- Phases 5–7: security, dashboards polish, scenario validation

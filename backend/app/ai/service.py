@@ -11,11 +11,13 @@ from sqlalchemy.orm import Session
 
 from app.ai.factory import get_ai_provider
 from app.ai.interface import AIProvider
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.ai_analysis import AIAnalysis, AIAnalysisStatus
 from app.models.department import Department
 from app.models.request import Request, RequestStatus
 from app.models.request_history import RequestHistory
+from app.modules.routing.service import apply_routing_after_analysis
 
 logger = get_logger(__name__)
 
@@ -35,12 +37,10 @@ def process_request_analysis(
     request_id: UUID,
     provider: AIProvider | None = None,
 ) -> AIAnalysis:
-    """Run at most one AI call for the current request content; persist AIAnalysis.
+    """Run at most one AI call for the current request content; persist AIAnalysis; route.
 
-    Status handoff (Phase 3):
-    - ``submitted`` → ``ai_processing`` when work starts
-    - after successful analysis, request **remains** ``ai_processing`` with
-      ``AIAnalysis.status=completed`` so Phase 4 can apply confidence routing
+    After analysis (Phase 4): confidence routing moves the request to
+    ``pending_assignment`` (auto dept) or ``pending_review``.
     """
     request = db.query(Request).filter(Request.id == request_id).with_for_update().first()
     if request is None:
@@ -57,6 +57,9 @@ def process_request_analysis(
     )
     if existing:
         logger.info("Skipping AI call; completed analysis %s already exists", existing.id)
+        apply_routing_after_analysis(db, request=request, analysis=existing)
+        db.commit()
+        db.refresh(existing)
         return existing
 
     if request.status == RequestStatus.SUBMITTED:
@@ -74,9 +77,13 @@ def process_request_analysis(
         )
         db.flush()
 
+    settings = get_settings()
     ai = provider or get_ai_provider()
     started = time.perf_counter()
     try:
+        if settings.ai_force_failure:
+            raise RuntimeError("Simulated AI provider outage (AI_FORCE_FAILURE=true)")
+
         result = ai.analyze_request(title=request.title, description=request.description)
         duration_ms = int((time.perf_counter() - started) * 1000)
         rec = result.recommendation
@@ -101,15 +108,20 @@ def process_request_analysis(
             confidence=Decimal(str(round(rec.confidence, 4))),
             recommended_department_id=dept_id,
             rationale=rec.rationale,
-            raw_response=result.raw_response,
+            raw_response={
+                **result.raw_response,
+                "is_hr_sensitive": rec.is_hr_sensitive,
+            },
             idempotency_key=key,
             model_id=result.model_id,
             prompt_version=result.prompt_version,
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
             duration_ms=duration_ms,
+            recommended_priority=rec.recommended_priority,
         )
         db.add(analysis)
+        db.flush()
         db.add(
             RequestHistory(
                 request_id=request.id,
@@ -123,10 +135,11 @@ def process_request_analysis(
                 ),
             )
         )
+        apply_routing_after_analysis(db, request=request, analysis=analysis)
         db.commit()
         db.refresh(analysis)
         return analysis
-    except Exception as exc:  # noqa: BLE001 — persist failure for ops visibility
+    except Exception as exc:  # noqa: BLE001 — persist failure then route to review
         duration_ms = int((time.perf_counter() - started) * 1000)
         logger.exception("AI analysis failed for request %s", request_id)
         analysis = AIAnalysis(
@@ -144,8 +157,10 @@ def process_request_analysis(
             input_tokens=None,
             output_tokens=None,
             duration_ms=duration_ms,
+            recommended_priority=None,
         )
         db.add(analysis)
+        db.flush()
         db.add(
             RequestHistory(
                 request_id=request.id,
@@ -156,6 +171,7 @@ def process_request_analysis(
                 details=str(exc)[:500],
             )
         )
+        apply_routing_after_analysis(db, request=request, analysis=analysis)
         db.commit()
         db.refresh(analysis)
         return analysis

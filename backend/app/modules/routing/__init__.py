@@ -1,1 +1,1 @@
-"""routing module — implemented in later phases."""
+"""Routing module — confidence thresholds and review handoff."""

@@ -56,6 +56,8 @@ class RequestSummary(BaseModel):
     requester_id: UUID
     department_id: UUID | None
     is_hr_sensitive: bool
+    confidentiality: str | None = None
+    clarification_required: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -81,6 +83,7 @@ class AIAnalysisOut(BaseModel):
     confidence: float | None
     recommended_department_id: UUID | None
     recommended_department_code: str | None = None
+    recommended_priority: str | None = None
     rationale: str | None
     model_id: str | None = None
     prompt_version: str | None = None

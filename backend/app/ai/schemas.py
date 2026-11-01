@@ -19,6 +19,7 @@ class AIRoutingRecommendation(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     rationale: str = Field(min_length=1, max_length=2000)
     is_hr_sensitive: bool = False
+    recommended_priority: Literal["low", "medium", "high", "urgent"] | None = None
     scenario_id: str | None = Field(
         default=None,
         description="Optional fixture/scenario identifier (mock)",

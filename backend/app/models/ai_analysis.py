@@ -60,6 +60,7 @@ class AIAnalysis(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recommended_priority: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     request: Mapped[Request] = relationship("Request", back_populates="analyses")
     recommended_department: Mapped[Department | None] = relationship("Department")

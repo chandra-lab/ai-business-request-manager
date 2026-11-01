@@ -147,6 +147,7 @@ def get_analysis_endpoint(
         confidence=float(analysis.confidence) if analysis.confidence is not None else None,
         recommended_department_id=analysis.recommended_department_id,
         recommended_department_code=dept_code,
+        recommended_priority=analysis.recommended_priority,
         rationale=analysis.rationale,
         model_id=analysis.model_id,
         prompt_version=analysis.prompt_version,

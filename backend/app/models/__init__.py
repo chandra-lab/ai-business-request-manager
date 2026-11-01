@@ -6,6 +6,7 @@ from app.models.audit_log import AuditLog
 from app.models.department import Department
 from app.models.hr_case_access import HRCaseAccess
 from app.models.hr_case_note import HRCaseNote
+from app.models.notification import Notification
 from app.models.outbox_message import OutboxMessage
 from app.models.request import Request
 from app.models.request_history import RequestHistory
@@ -29,4 +30,5 @@ __all__ = [
     "HRCaseNote",
     "RequestReviewQueue",
     "OutboxMessage",
+    "Notification",
 ]

@@ -1,14 +1,13 @@
 """FastAPI application entrypoint."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from pathlib import Path
-
-from app.api.routes import auth, dashboard, health, requests
+from app.api.routes import auth, dashboard, departments, health, manager, requests, review
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 
@@ -39,7 +38,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         description=(
             "AI Business Request Manager — internal request routing for an automotive group. "
-            "Phase 3: Mock/Anthropic AI analysis via outbox workers."
+            "Phase 4: confidence routing, review queue, manager assignment."
         ),
         version=__version__,
         lifespan=lifespan,
@@ -60,6 +59,9 @@ def create_app() -> FastAPI:
     application.include_router(auth.router, prefix=settings.api_v1_prefix)
     application.include_router(requests.router, prefix=settings.api_v1_prefix)
     application.include_router(dashboard.router, prefix=settings.api_v1_prefix)
+    application.include_router(review.router, prefix=settings.api_v1_prefix)
+    application.include_router(manager.router, prefix=settings.api_v1_prefix)
+    application.include_router(departments.router, prefix=settings.api_v1_prefix)
 
     return application
 

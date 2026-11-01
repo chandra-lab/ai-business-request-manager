@@ -3,6 +3,7 @@ export type RequestStatus =
   | "submitted"
   | "ai_processing"
   | "pending_review"
+  | "pending_assignment"
   | "assigned"
   | "in_progress"
   | "resolved"

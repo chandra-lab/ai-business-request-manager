@@ -2,7 +2,7 @@ import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 export function AppLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
 
   return (
     <div className="min-h-screen">
@@ -12,13 +12,23 @@ export function AppLayout() {
             <Link to="/app" className="font-display text-xl font-bold text-brand-700">
               AIBRM
             </Link>
-            <nav className="flex gap-4 text-sm text-ink-700">
+            <nav className="flex flex-wrap gap-4 text-sm text-ink-700">
               <Link className="hover:text-brand-700" to="/app">
                 Dashboard
               </Link>
               <Link className="hover:text-brand-700" to="/app/requests/new">
                 New request
               </Link>
+              {hasRole("reviewer", "admin") ? (
+                <Link className="hover:text-brand-700" to="/app/review">
+                  Review queue
+                </Link>
+              ) : null}
+              {hasRole("department_manager", "admin") ? (
+                <Link className="hover:text-brand-700" to="/app/manager">
+                  Manager queue
+                </Link>
+              ) : null}
             </nav>
           </div>
           <div className="flex items-center gap-4">

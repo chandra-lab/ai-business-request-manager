@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     # Official Claude Haiku 5.5 ID from Anthropic docs: https://platform.claude.com/docs/en/models/haiku-5-5/overview
     anthropic_model_id: str = "claude-haiku-5-5"
     anthropic_max_tokens: int = 512
+    # Simulate provider outage (forces AI failure → manual review) for scenario testing
+    ai_force_failure: bool = False
+
+    # Confidence routing thresholds (Phase 4)
+    routing_auto_assign_min: float = 0.85
+    routing_review_min: float = 0.60
+    outbox_max_attempts: int = 5
 
     seed_demo_password: str = "DemoPass123!"
 

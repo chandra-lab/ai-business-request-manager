@@ -28,11 +28,17 @@ class RequestStatus(StrEnum):
     SUBMITTED = "submitted"
     AI_PROCESSING = "ai_processing"
     PENDING_REVIEW = "pending_review"
+    PENDING_ASSIGNMENT = "pending_assignment"
     ASSIGNED = "assigned"
     IN_PROGRESS = "in_progress"
     RESOLVED = "resolved"
     CLOSED = "closed"
     CANCELLED = "cancelled"
+
+
+class ConfidentialityLevel(StrEnum):
+    STANDARD = "standard"
+    HIGHLY_CONFIDENTIAL = "highly_confidential"
 
 
 class RequestPriority(StrEnum):
@@ -75,6 +81,16 @@ class Request(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     is_hr_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    confidentiality: Mapped[ConfidentialityLevel] = mapped_column(
+        Enum(
+            ConfidentialityLevel,
+            name="confidentiality_level",
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        default=ConfidentialityLevel.STANDARD,
+        nullable=False,
+    )
+    clarification_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(
         String(128),
         unique=True,

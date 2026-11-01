@@ -113,4 +113,5 @@ def test_worker_idempotency_single_ai_call(db):
     assert count == 1
 
     db.refresh(request)
-    assert request.status == RequestStatus.AI_PROCESSING
+    # Phase 4 routes high-confidence IT to pending_assignment
+    assert request.status == RequestStatus.PENDING_ASSIGNMENT

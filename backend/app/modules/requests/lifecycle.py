@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from app.models.request import RequestStatus
 
-# Phase 2 keeps transitions narrow. AI/routing (Phase 3–4) will drive
-# submitted → ai_processing → pending_review|assigned.
 ALLOWED_TRANSITIONS: dict[RequestStatus, set[RequestStatus]] = {
     RequestStatus.DRAFT: {RequestStatus.SUBMITTED, RequestStatus.CANCELLED},
     RequestStatus.SUBMITTED: {
@@ -14,15 +12,21 @@ ALLOWED_TRANSITIONS: dict[RequestStatus, set[RequestStatus]] = {
     },
     RequestStatus.AI_PROCESSING: {
         RequestStatus.PENDING_REVIEW,
-        RequestStatus.ASSIGNED,
+        RequestStatus.PENDING_ASSIGNMENT,
         RequestStatus.CANCELLED,
     },
     RequestStatus.PENDING_REVIEW: {
+        RequestStatus.PENDING_ASSIGNMENT,
+        RequestStatus.CANCELLED,
+    },
+    RequestStatus.PENDING_ASSIGNMENT: {
         RequestStatus.ASSIGNED,
+        RequestStatus.PENDING_REVIEW,
         RequestStatus.CANCELLED,
     },
     RequestStatus.ASSIGNED: {
         RequestStatus.IN_PROGRESS,
+        RequestStatus.PENDING_ASSIGNMENT,
         RequestStatus.CANCELLED,
     },
     RequestStatus.IN_PROGRESS: {
