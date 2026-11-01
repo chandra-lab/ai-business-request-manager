@@ -84,6 +84,40 @@ export const requestsApi = {
     return api<RequestHistoryItem[]>(`/api/v1/requests/${id}/history`);
   },
 
+  comments(id: string) {
+    return api<
+      {
+        id: string;
+        request_id: string;
+        author_id: string;
+        author_name: string | null;
+        body: string;
+        created_at: string;
+      }[]
+    >(`/api/v1/requests/${id}/comments`);
+  },
+
+  addComment(id: string, body: string) {
+    return api(`/api/v1/requests/${id}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    });
+  },
+
+  assignableUsers(id: string) {
+    return api<{ id: string; email: string; full_name: string; department_id: string | null }[]>(
+      `/api/v1/requests/${id}/assignable-users`,
+    );
+  },
+
+  assign(id: string, assigneeId: string, notes?: string) {
+    return api(`/api/v1/requests/${id}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ assignee_id: assigneeId, notes }),
+    });
+  },
+
+
   async analysis(id: string): Promise<AIAnalysis | null> {
     const headers = new Headers();
     const token = getAccessToken();

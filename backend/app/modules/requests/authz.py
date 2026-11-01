@@ -87,7 +87,29 @@ def can_view_request(db: Session, user: User, request: Request) -> bool:
         return True
     if is_manager(user) and user.department_id and request.department_id == user.department_id:
         return True
-    if is_reviewer(user) and request.status == RequestStatus.PENDING_REVIEW:
+    if is_reviewer(user):
+        # Review queue items, plus department-routed work reviewers may reassign
+        if request.status == RequestStatus.PENDING_REVIEW:
+            return True
+        if request.department_id and request.status in {
+            RequestStatus.PENDING_ASSIGNMENT,
+            RequestStatus.ASSIGNED,
+            RequestStatus.IN_PROGRESS,
+        }:
+            return True
+    # Active assignee can always open the ticket
+    from app.models.assignment import Assignment, AssignmentStatus
+
+    active = (
+        db.query(Assignment)
+        .filter(
+            Assignment.request_id == request.id,
+            Assignment.status == AssignmentStatus.ACTIVE,
+            Assignment.assignee_id == user.id,
+        )
+        .first()
+    )
+    if active is not None:
         return True
     # Same-department visibility for assigned work (department-level read)
     if (
@@ -102,6 +124,29 @@ def can_view_request(db: Session, user: User, request: Request) -> bool:
             RequestStatus.RESOLVED,
         }
     ):
+        return True
+    return False
+
+
+def can_view_internal_history(user: User) -> bool:
+    """Staff roles see RequestHistory; employees see comments instead."""
+    return bool(is_admin(user) or is_manager(user) or is_reviewer(user) or is_hr(user))
+
+
+def can_assign_individual(db: Session, user: User, request: Request) -> bool:
+    """Managers of the request dept, reviewers (after dept set), or admins."""
+    if is_hr_case(request):
+        return can_access_hr_content(db, user, request) and is_hr(user)
+    if is_admin(user):
+        return True
+    if (
+        is_manager(user)
+        and user.department_id
+        and request.department_id
+        and user.department_id == request.department_id
+    ):
+        return True
+    if is_reviewer(user) and request.department_id is not None:
         return True
     return False
 

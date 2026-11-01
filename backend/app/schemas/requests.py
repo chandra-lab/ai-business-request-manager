@@ -48,6 +48,21 @@ class RequestHistoryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+
+
+class CommentOut(BaseModel):
+    id: UUID
+    request_id: UUID
+    author_id: UUID
+    author_name: str | None = None
+    body: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class RequestSummary(BaseModel):
     id: UUID
     title: str

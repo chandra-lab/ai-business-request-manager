@@ -9,6 +9,7 @@ from app.models.hr_case_note import HRCaseNote
 from app.models.notification import Notification
 from app.models.outbox_message import OutboxMessage
 from app.models.request import Request
+from app.models.request_comment import RequestComment
 from app.models.request_history import RequestHistory
 from app.models.request_review_queue import RequestReviewQueue
 from app.models.role import Role, UserRole
@@ -24,6 +25,7 @@ __all__ = [
     "AIAnalysis",
     "Assignment",
     "RequestHistory",
+    "RequestComment",
     "Attachment",
     "AuditLog",
     "HRCaseAccess",

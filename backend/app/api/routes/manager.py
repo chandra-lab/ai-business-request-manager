@@ -1,23 +1,37 @@
-"""Department manager assignment APIs (Phase 4)."""
+"""Department manager / reviewer assignment APIs."""
 
 from __future__ import annotations
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.notification import Notification
 from app.models.user import User
-from app.modules.assignments.service import assign_employee, list_manager_queue
+from app.modules.assignments.service import (
+    assign_employee,
+    list_assignable_users,
+    list_manager_queue,
+)
 from app.modules.requests import authz
 from app.modules.requests.service import get_request_or_404
 from app.schemas.requests import RequestSummary
 from app.schemas.routing import AssignEmployeeBody, AssignmentOut, NotificationOut
 
 router = APIRouter(tags=["manager"])
+
+
+class AssignableUserOut(BaseModel):
+    id: UUID
+    email: str
+    full_name: str
+    department_id: UUID | None
+
+    model_config = {"from_attributes": True}
 
 
 @router.get("/manager/queue", response_model=list[RequestSummary])
@@ -31,6 +45,17 @@ def manager_queue(
     return [RequestSummary.model_validate(i) for i in items]
 
 
+@router.get("/requests/{request_id}/assignable-users", response_model=list[AssignableUserOut])
+def assignable_users(
+    request_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AssignableUserOut]:
+    request = get_request_or_404(db, request_id)
+    users = list_assignable_users(db, actor=current_user, request=request)
+    return [AssignableUserOut.model_validate(u) for u in users]
+
+
 @router.post("/requests/{request_id}/assign", response_model=AssignmentOut)
 def assign_request(
     request_id: UUID,
@@ -42,7 +67,7 @@ def assign_request(
     assignment = assign_employee(
         db,
         request=request,
-        manager=current_user,
+        actor=current_user,
         assignee_id=body.assignee_id,
         notes=body.notes,
     )
@@ -56,12 +81,12 @@ def reassign_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AssignmentOut:
-    """Reassign is the same path as assign with a different assignee (marks prior REASSIGNED)."""
+    """Reassign marks prior ACTIVE assignment REASSIGNED."""
     request = get_request_or_404(db, request_id)
     assignment = assign_employee(
         db,
         request=request,
-        manager=current_user,
+        actor=current_user,
         assignee_id=body.assignee_id,
         notes=body.notes or "Reassignment",
     )

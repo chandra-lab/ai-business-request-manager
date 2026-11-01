@@ -37,8 +37,9 @@ Seeded by `backend/scripts/seed.py` using `SEED_DEMO_PASSWORD` from `.env` (defa
 
 | Email                       | Roles                        |
 |-----------------------------|------------------------------|
-| employee@aibrm.example.com  | employee                     |
-| manager@aibrm.example.com   | employee, department_manager |
+| employee@aibrm.example.com  | employee (IT)                |
+| manager@aibrm.example.com   | department_manager (**IT**)  |
+| fleet.manager@aibrm.example.com | department_manager (FLEET) |
 | reviewer@aibrm.example.com  | employee, reviewer           |
 | hr@aibrm.example.com        | employee, hr                 |
 | admin@aibrm.example.com     | employee, admin              |

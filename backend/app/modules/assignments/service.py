@@ -1,4 +1,4 @@
-"""Manager individual assignment / reassignment (Phase 4)."""
+"""Manager/reviewer individual assignment / reassignment."""
 
 from __future__ import annotations
 
@@ -31,33 +31,33 @@ def assign_employee(
     db: Session,
     *,
     request: Request,
-    manager: User,
+    actor: User,
     assignee_id: UUID,
     notes: str | None = None,
 ) -> Assignment:
-    if not (
-        authz.is_admin(manager)
-        or (
-            authz.is_manager(manager)
-            and manager.department_id
-            and request.department_id == manager.department_id
-        )
-    ):
+    if not authz.can_assign_individual(db, actor, request):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
 
     if request.status not in {
         RequestStatus.PENDING_ASSIGNMENT,
         RequestStatus.ASSIGNED,
+        RequestStatus.IN_PROGRESS,
     }:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot assign in status {request.status.value}",
         )
 
+    if request.department_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request has no department for assignment",
+        )
+
     assignee = db.query(User).filter(User.id == assignee_id, User.is_active.is_(True)).first()
     if assignee is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignee not found")
-    if request.department_id and assignee.department_id != request.department_id:
+    if assignee.department_id != request.department_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Assignee must belong to the request department",
@@ -65,7 +65,6 @@ def assign_employee(
 
     active = _active_assignment(db, request.id)
     if active and active.assignee_id == assignee_id:
-        # Idempotent: same active assignee
         return active
 
     if active:
@@ -78,33 +77,27 @@ def assign_employee(
         db.add(
             RequestHistory(
                 request_id=request.id,
-                actor_id=manager.id,
+                actor_id=actor.id,
                 action="status_changed",
                 from_status=previous.value,
                 to_status=request.status.value,
-                details="Manager assigned individual",
+                details="Individual assigned",
             )
         )
 
     assignment = Assignment(
         request_id=request.id,
-        department_id=request.department_id or manager.department_id,
+        department_id=request.department_id,
         assignee_id=assignee_id,
-        assigned_by_id=manager.id,
+        assigned_by_id=actor.id,
         status=AssignmentStatus.ACTIVE,
         notes=notes,
     )
-    if assignment.department_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Request has no department for assignment",
-        )
-
     db.add(assignment)
     db.add(
         RequestHistory(
             request_id=request.id,
-            actor_id=manager.id,
+            actor_id=actor.id,
             action="assigned_employee" if not active else "reassigned_employee",
             from_status=request.status.value,
             to_status=request.status.value,
@@ -124,11 +117,36 @@ def assign_employee(
     return assignment
 
 
+def list_assignable_users(db: Session, *, actor: User, request: Request) -> list[User]:
+    if not authz.can_assign_individual(db, actor, request):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
+    if request.department_id is None:
+        return []
+    return (
+        db.query(User)
+        .filter(
+            User.department_id == request.department_id,
+            User.is_active.is_(True),
+        )
+        .order_by(User.full_name.asc())
+        .all()
+    )
+
+
 def list_manager_queue(db: Session, manager: User) -> list[Request]:
+    """Pending assignment (+ assigned) for the manager's department."""
     if authz.is_admin(manager):
         return (
             db.query(Request)
-            .filter(Request.status == RequestStatus.PENDING_ASSIGNMENT)
+            .filter(
+                Request.status.in_(
+                    [
+                        RequestStatus.PENDING_ASSIGNMENT,
+                        RequestStatus.ASSIGNED,
+                    ]
+                ),
+                Request.is_hr_sensitive.is_(False),
+            )
             .order_by(Request.created_at.desc())
             .all()
         )
@@ -137,8 +155,15 @@ def list_manager_queue(db: Session, manager: User) -> list[Request]:
     return (
         db.query(Request)
         .filter(
-            Request.status == RequestStatus.PENDING_ASSIGNMENT,
             Request.department_id == manager.department_id,
+            Request.is_hr_sensitive.is_(False),
+            Request.status.in_(
+                [
+                    RequestStatus.PENDING_ASSIGNMENT,
+                    RequestStatus.ASSIGNED,
+                    RequestStatus.IN_PROGRESS,
+                ]
+            ),
         )
         .order_by(Request.created_at.desc())
         .all()

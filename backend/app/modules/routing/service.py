@@ -388,6 +388,15 @@ def request_information_from_review(
         title="More information needed",
         body=message,
     )
+    from app.models.request_comment import RequestComment
+
+    db.add(
+        RequestComment(
+            request_id=request.id,
+            author_id=reviewer_id,
+            body=f"Reviewer request: {message}",
+        )
+    )
     db.commit()
     db.refresh(request)
     return request

@@ -22,9 +22,12 @@ from app.modules.requests.service import (
     list_requests,
     update_request,
 )
+from app.modules.comments import service as comments_service
 from app.schemas.requests import (
     AIAnalysisOut,
     AttachmentOut,
+    CommentCreate,
+    CommentOut,
     RequestCreate,
     RequestDetail,
     RequestHistoryOut,
@@ -113,7 +116,46 @@ def get_history_endpoint(
 ) -> list[RequestHistoryOut]:
     request = get_request_or_404(db, request_id)
     authz.require_view(db, current_user, request)
+    # Internal status transitions are staff-only; employees use the comments thread.
+    if not authz.can_view_internal_history(current_user):
+        return []
     return [RequestHistoryOut.model_validate(h) for h in list_history(db, request_id)]
+
+
+@router.get("/{request_id}/comments", response_model=list[CommentOut])
+def list_comments_endpoint(
+    request_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CommentOut]:
+    request = get_request_or_404(db, request_id)
+    items = comments_service.list_comments(db, user=current_user, request=request)
+    out: list[CommentOut] = []
+    for c in items:
+        payload = CommentOut.model_validate(c)
+        payload.author_name = c.author.full_name if c.author is not None else None
+        out.append(payload)
+    return out
+
+
+@router.post(
+    "/{request_id}/comments",
+    response_model=CommentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_comment_endpoint(
+    request_id: UUID,
+    body: CommentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CommentOut:
+    request = get_request_or_404(db, request_id)
+    comment = comments_service.add_comment(
+        db, user=current_user, request=request, body=body.body
+    )
+    payload = CommentOut.model_validate(comment)
+    payload.author_name = current_user.full_name
+    return payload
 
 
 @router.get("/{request_id}/analysis", response_model=AIAnalysisOut)

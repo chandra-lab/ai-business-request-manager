@@ -217,6 +217,15 @@ def update_request(
                 to_status=request.status.value,
                 details="Requester clarified description",
             )
+            from app.models.request_comment import RequestComment
+
+            db.add(
+                RequestComment(
+                    request_id=request.id,
+                    author_id=user.id,
+                    body=f"Clarification: {body.description.strip()}",
+                )
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

@@ -65,7 +65,9 @@ ROLES = [
 # email, full_name, department_code, roles
 DEMO_USERS = [
     ("employee@aibrm.example.com", "Eva Employee", "IT", ["employee"]),
-    ("manager@aibrm.example.com", "Morgan Manager", "FLEET", ["employee", "department_manager"]),
+    # Primary demo manager owns IT (matches IT auto-route demos)
+    ("manager@aibrm.example.com", "Morgan Manager", "IT", ["employee", "department_manager"]),
+    ("fleet.manager@aibrm.example.com", "Frankie Fleet", "FLEET", ["employee", "department_manager"]),
     ("reviewer@aibrm.example.com", "Riley Reviewer", "LEGAL", ["employee", "reviewer"]),
     ("hr@aibrm.example.com", "Harper HR", "HR", ["employee", "hr"]),
     ("admin@aibrm.example.com", "Alex Admin", "IT", ["employee", "admin"]),

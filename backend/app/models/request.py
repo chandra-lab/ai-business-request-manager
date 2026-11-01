@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.attachment import Attachment
     from app.models.department import Department
     from app.models.hr_case_note import HRCaseNote
+    from app.models.request_comment import RequestComment
     from app.models.request_history import RequestHistory
     from app.models.user import User
 
@@ -112,6 +113,11 @@ class Request(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     history: Mapped[list[RequestHistory]] = relationship(
         "RequestHistory",
+        back_populates="request",
+        cascade="all, delete-orphan",
+    )
+    comments: Mapped[list[RequestComment]] = relationship(
+        "RequestComment",
         back_populates="request",
         cascade="all, delete-orphan",
     )

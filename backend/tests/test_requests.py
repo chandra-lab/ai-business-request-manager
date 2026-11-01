@@ -31,11 +31,17 @@ def test_create_list_detail_history(client, auth_headers):
     assert detail.status_code == 200
     assert detail.json()["title"] == "Badge access issue"
 
+    # Employees do not see internal RequestHistory
     history = client.get(f"/api/v1/requests/{request_id}/history", headers=headers)
     assert history.status_code == 200
-    actions = [h["action"] for h in history.json()]
+    assert history.json() == []
+
+    admin = auth_headers("admin@aibrm.example.com")
+    staff_history = client.get(f"/api/v1/requests/{request_id}/history", headers=admin)
+    assert staff_history.status_code == 200
+    actions = [h["action"] for h in staff_history.json()]
     assert "created" in actions
-    assert history.json()[0]["to_status"] == "submitted"
+    assert staff_history.json()[0]["to_status"] == "submitted"
 
     analysis = client.get(f"/api/v1/requests/{request_id}/analysis", headers=headers)
     assert analysis.status_code == 404
@@ -132,7 +138,9 @@ def test_patch_submit_and_cancel(client, auth_headers):
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "cancelled"
 
-    history = client.get(f"/api/v1/requests/{request_id}/history", headers=headers)
+    assert client.get(f"/api/v1/requests/{request_id}/history", headers=headers).json() == []
+    admin = auth_headers("admin@aibrm.example.com")
+    history = client.get(f"/api/v1/requests/{request_id}/history", headers=admin)
     assert any(h["to_status"] == "draft" for h in history.json())
     assert any(h["to_status"] == "submitted" for h in history.json())
     assert any(h["to_status"] == "cancelled" for h in history.json())
